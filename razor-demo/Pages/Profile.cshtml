@@ -1,0 +1,35 @@
+@page
+@model ProfileModel
+@{
+    ViewData["Title"] = "Profile";
+}
+
+<h1>Profile</h1>
+<p class="text-muted">Toàn bộ claims lấy từ token do Keycloak trả về:</p>
+
+<table class="table table-striped table-sm">
+    <thead>
+        <tr>
+            <th style="width: 30%">Claim type</th>
+            <th>Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var claim in User.Claims.OrderBy(c => c.Type))
+        {
+            <tr>
+                <td><code>@claim.Type</code></td>
+                <td class="text-break">@claim.Value</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<h4 class="mt-4">Tokens (SaveTokens = true)</h4>
+<dl>
+    @foreach (var (name, value) in Model.Tokens)
+    {
+        <dt><code>@name</code></dt>
+        <dd class="text-break"><small>@value</small></dd>
+    }
+</dl>

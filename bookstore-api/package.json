@@ -1,0 +1,14 @@
+{
+  "name": "bookstore-api",
+  "version": "1.0.0",
+  "description": "Bookstore REST API — protected by Keycloak token introspection",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.0"
+  }
+}

@@ -1,0 +1,79 @@
+version: "3.8"
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1.4
+    container_name: keycloak
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak-config:/opt/keycloak/data/import
+    networks:
+      - keycloak-net
+    healthcheck:
+      test: ["CMD", "java", "-version"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+
+  razor-app:
+    build: ./razor-demo
+    container_name: razor-app
+    ports:
+      - "5100:5100"
+    # Toàn bộ config Keycloak (ServerUrl/Realm/ClientId/ClientSecret) đọc từ .env,
+    # không hardcode ở đây. Browser redirect và backchannel đều dùng localhost:8080;
+    # extra_hosts map "localhost" → host-gateway để issuer khớp.
+    env_file:
+      - ./razor-demo/.env
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
+  bookstore-api:
+    build: ./bookstore-api
+    container_name: bookstore-api
+    ports:
+      - "3003:3003"
+    # Config (PORT/REALM/CLIENT_SECRET…) đọc từ .env qua env_file, không hardcode.
+    # Introspection gọi localhost:8080 → cần extra_hosts giống razor-app.
+    env_file:
+      - ./bookstore-api/.env
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
+  demo-keycloak:
+    build: ./demo-keycloak
+    container_name: demo-keycloak
+    # SPA static: biến REACT_APP_* đã nhúng vào bundle lúc build image;
+    # mọi request (Keycloak, bookstore-api) đều do browser gọi, không cần env runtime.
+    ports:
+      - "3002:3002"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
+networks:
+  keycloak-net:
+    driver: bridge
