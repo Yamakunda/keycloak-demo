@@ -74,6 +74,36 @@ services:
     networks:
       - keycloak-net
 
+  bookstore-api-2:
+    build: ./bookstore-api-2
+    container_name: bookstore-api-2
+    ports:
+      - "3013:3013"
+    # Exchange code lấy token diễn ra ở đây (backend), không phải bookstore-fe-2 —
+    # client_secret + redirect_uri (Keycloak client test-client-2) chỉ nằm ở .env này.
+    env_file:
+      - ./bookstore-api-2/.env
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
+  bookstore-fe-2:
+    build: ./bookstore-fe-2
+    container_name: bookstore-fe-2
+    # SPA static: biến REACT_APP_* đã nhúng vào bundle lúc build image (xem .dockerignore);
+    # mọi request (Keycloak /login, bookstore-api-2) đều do browser gọi, không cần env runtime.
+    ports:
+      - "3012:3012"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
 networks:
   keycloak-net:
     driver: bridge

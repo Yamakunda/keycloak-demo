@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "cover": "📕",
+    "title": "Clean Code",
+    "author": "Robert C. Martin",
+    "price": 320000,
+    "genre": "Technology"
+  },
+  {
+    "id": 2,
+    "cover": "📗",
+    "title": "The Pragmatic Programmer",
+    "author": "Hunt & Thomas",
+    "price": 280000,
+    "genre": "Technology"
+  },
+  {
+    "id": 3,
+    "cover": "📘",
+    "title": "Dune",
+    "author": "Frank Herbert",
+    "price": 180000,
+    "genre": "Sci-Fi"
+  },
+  {
+    "id": 4,
+    "cover": "📙",
+    "title": "Atomic Habits",
+    "author": "James Clear",
+    "price": 150000,
+    "genre": "Self-help"
+  },
+  {
+    "id": 5,
+    "cover": "📔",
+    "title": "Design Patterns",
+    "author": "Gang of Four",
+    "price": 350000,
+    "genre": "Technology"
+  },
+  {
+    "id": 6,
+    "cover": "📚",
+    "title": "Chim chim",
+    "author": "Cac Cac",
+    "genre": "Khác",
+    "price": 123
+  },
+  {
+    "id": 7,
+    "cover": "📚",
+    "title": "Cac ac",
+    "author": "chim chim",
+    "genre": "Khác",
+    "price": 123
+  }
+]

@@ -1,0 +1,104 @@
+══════════════════════════════════════════════════════════════════════════════
+CURL TEST — BOOKSTORE API (http://localhost:3003)
+══════════════════════════════════════════════════════════════════════════════
+
+Chuẩn bị:
+  1. Backend đang chạy:  cd bookstore-api && npm start
+  2. Lấy access token:   đăng nhập http://localhost:3002 → DevTools →
+                         Application → Cookies → copy giá trị access_token
+  3. Thay <TOKEN> trong các lệnh dưới bằng token vừa copy
+     (hoặc chạy:  export TOKEN="eyJhbGci..."  rồi dùng $TOKEN)
+
+
+curl http://localhost:8080/realms/test/protocol/openid-connect/token \
+  -d "grant_type=password" \
+  -d "client_id=test-client" \
+  -d "client_secret=shngTw44FR1EZPznv9JWizP1Y4QgdiNU" \
+  -d "username=test" \
+  -d "password=test123"
+
+
+── 1. KHÔNG CẦN TOKEN ─────────────────────────────────────────────────────────
+
+# Health check — expect 200 {"status":"ok"}
+curl http://localhost:3003/health
+
+# Gọi API không có token — expect 401
+curl http://localhost:3003/api/books
+
+# Token giả — expect 401 (Keycloak introspection trả active:false)
+curl http://localhost:3003/api/books -H "Authorization: Bearer token-gia"
+
+
+── 2. XEM SÁCH ────────────────────────────────────────────────────────────────
+
+# Xem toàn bộ sách — expect 200, trả {total, authenticatedAs, books:[...]}
+curl http://localhost:3003/api/books -H "Authorization: Bearer <TOKEN>"
+
+# Xem một cuốn — expect 200
+curl http://localhost:3003/api/books/1 -H "Authorization: Bearer <TOKEN>"
+
+# Sách không tồn tại — expect 404
+curl http://localhost:3003/api/books/999 -H "Authorization: Bearer <TOKEN>"
+
+
+── 3. TẠO SÁCH ────────────────────────────────────────────────────────────────
+
+# Tạo sách mới — expect 201, trả về sách kèm id mới (=6 nếu server mới restart)
+curl -X POST http://localhost:3003/api/books \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Sapiens","author":"Yuval Noah Harari","price":210000,"genre":"History","cover":"📒"}'
+
+# Thiếu trường bắt buộc — expect 400 validation
+curl -X POST http://localhost:3003/api/books \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"","price":-5}'
+
+
+── 4. UPDATE SÁCH ─────────────────────────────────────────────────────────────
+
+# Update giá (gửi trường nào sửa trường đó) — expect 200
+curl -X PUT http://localhost:3003/api/books/6 \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"price":199000}'
+
+# Update nhiều trường — expect 200
+curl -X PUT http://localhost:3003/api/books/1 \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Clean Code (2nd Edition)","price":350000}'
+
+# Xem lại sau khi update
+curl http://localhost:3003/api/books/6 -H "Authorization: Bearer <TOKEN>"
+
+
+── 5. XÓA SÁCH ────────────────────────────────────────────────────────────────
+
+# Xóa sách — expect 204 No Content
+curl -X DELETE http://localhost:3003/api/books/6 \
+  -H "Authorization: Bearer <TOKEN>" -i
+
+# Xóa sách không tồn tại — expect 404
+curl -X DELETE http://localhost:3003/api/books/999 \
+  -H "Authorization: Bearer <TOKEN>"
+
+# Xem lại danh sách sau khi xóa
+curl http://localhost:3003/api/books -H "Authorization: Bearer <TOKEN>"
+
+
+── THAM KHẢO: LẤY TOKEN KHÔNG CẦN BROWSER ─────────────────────────────────────
+
+Yêu cầu: Admin Console → Clients → test-client → bật "Direct access grants"
+Thay <user>/<password> bằng tài khoản trong realm test:
+
+curl http://localhost:8080/realms/test/protocol/openid-connect/token \
+  -d "grant_type=password" \
+  -d "client_id=test-client" \
+  -d "client_secret=shngTw44FR1EZPznv9JWizP1Y4QgdiNU" \
+  -d "username=<user>" \
+  -d "password=<password>"
+
+→ copy trường "access_token" trong JSON trả về.
