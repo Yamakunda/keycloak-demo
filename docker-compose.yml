@@ -104,6 +104,36 @@ services:
     networks:
       - keycloak-net
 
+  bookstore-api-oauth:
+    build: ./bookstore-api-oauth
+    container_name: bookstore-api-oauth
+    ports:
+      - "3023:3023"
+    # Bản OAuth demo: giống bookstore-api-2 nhưng dùng client test-client-oauth
+    # và bộ port riêng (API 3023, FE 3022) để chạy song song với stack -2.
+    env_file:
+      - ./bookstore-api-oauth/.env
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
+  bookstore-fe-oauth:
+    build: ./bookstore-fe-oauth
+    container_name: bookstore-fe-oauth
+    # SPA static: biến REACT_APP_* nhúng vào bundle lúc build image;
+    # browser gọi thẳng Keycloak :8080 và bookstore-api-oauth :3023.
+    ports:
+      - "3022:3022"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
 networks:
   keycloak-net:
     driver: bridge
