@@ -1,0 +1,58 @@
+# Seed data cho OpenLDAP demo (dc=bookstore,dc=local).
+# Không dùng cơ chế auto-bootstrap của image (hay bị lỗi khi bind-mount trên macOS) —
+# nạp thủ công 1 lần sau khi container openldap khởi động xong, xem README phần LDAP.
+
+dn: ou=people,dc=bookstore,dc=local
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=bookstore,dc=local
+objectClass: organizationalUnit
+ou: groups
+
+# --- Users --- mật khẩu demo cho cả 2 user: Password123
+
+dn: uid=alice,ou=people,dc=bookstore,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: alice
+cn: Alice Nguyen
+sn: Nguyen
+givenName: Alice
+displayName: Alice Nguyen
+mail: alice@bookstore.local
+uidNumber: 10001
+gidNumber: 10001
+homeDirectory: /home/alice
+loginShell: /bin/bash
+userPassword: Password123
+
+dn: uid=bob,ou=people,dc=bookstore,dc=local
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: bob
+cn: Bob Tran
+sn: Tran
+givenName: Bob
+displayName: Bob Tran
+mail: bob@bookstore.local
+uidNumber: 10002
+gidNumber: 10002
+homeDirectory: /home/bob
+loginShell: /bin/bash
+userPassword: Password123
+
+# --- Groups ---
+
+dn: cn=bookstore-admins,ou=groups,dc=bookstore,dc=local
+objectClass: groupOfNames
+cn: bookstore-admins
+member: uid=alice,ou=people,dc=bookstore,dc=local
+
+dn: cn=bookstore-users,ou=groups,dc=bookstore,dc=local
+objectClass: groupOfNames
+cn: bookstore-users
+member: uid=alice,ou=people,dc=bookstore,dc=local
+member: uid=bob,ou=people,dc=bookstore,dc=local

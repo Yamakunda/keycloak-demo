@@ -134,6 +134,44 @@ services:
     networks:
       - keycloak-net
 
+  # OpenLDAP demo — nguồn user cho Keycloak User Federation (LDAP) trên realm "test".
+  # Seed sẵn 2 user (alice/bob, mật khẩu Password123) qua ldap/bootstrap.ldif.
+  openldap:
+    image: osixia/openldap:1.5.0
+    container_name: openldap
+    environment:
+      LDAP_ORGANISATION: Bookstore
+      LDAP_DOMAIN: bookstore.local
+      LDAP_BASE_DN: dc=bookstore,dc=local
+      LDAP_ADMIN_PASSWORD: admin
+      LDAP_TLS: "false"
+    ports:
+      - "389:389"
+    volumes:
+      - openldap-data:/var/lib/ldap
+      - openldap-config:/etc/ldap/slapd.d
+      - ./ldap/bootstrap.ldif:/root/bootstrap.ldif:ro
+    networks:
+      - keycloak-net
+
+  # UI web để xem/sửa cây LDAP — http://localhost:6443 (login: cn=admin,dc=bookstore,dc=local / admin)
+  phpldapadmin:
+    image: osixia/phpldapadmin:0.9.0
+    container_name: phpldapadmin
+    environment:
+      PHPLDAPADMIN_LDAP_HOSTS: openldap
+      PHPLDAPADMIN_HTTPS: "false"
+    ports:
+      - "6443:80"
+    depends_on:
+      - openldap
+    networks:
+      - keycloak-net
+
 networks:
   keycloak-net:
     driver: bridge
+
+volumes:
+  openldap-data:
+  openldap-config:
