@@ -134,6 +134,37 @@ services:
     networks:
       - keycloak-net
 
+  bookstore-saml-api:
+    build: ./bookstore-saml-api
+    container_name: bookstore-saml-api
+    ports:
+      - "3033:3033"
+    # Demo SAML 2.0: backend là Service Provider, Keycloak là IdP (client bookstore-saml).
+    # Giữ SAML session (cookie httpOnly) và phục vụ JSON API cho bookstore-saml-fe.
+    # Lúc khởi động app fetch IdP metadata từ localhost:8080 → cần extra_hosts như razor-app.
+    env_file:
+      - ./bookstore-saml-api/.env
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
+  bookstore-saml-fe:
+    build: ./bookstore-saml-fe
+    container_name: bookstore-saml-fe
+    # SPA static: REACT_APP_API_URL nhúng vào bundle lúc build image;
+    # FE không đụng SAML/Keycloak — login/logout là redirect sang bookstore-saml-api.
+    ports:
+      - "3032:3032"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
   # OpenLDAP demo — nguồn user cho Keycloak User Federation (LDAP) trên realm "test".
   # Seed sẵn 2 user (alice/bob, mật khẩu Password123) qua ldap/bootstrap.ldif.
   openldap:

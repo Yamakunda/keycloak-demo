@@ -87,6 +87,22 @@
         "clientRole": false,
         "containerId": "7eab2cfb-a388-452b-b07f-784f329fe467",
         "attributes": {}
+      },
+      {
+        "name": "book-admin",
+        "description": "Can add/delete books in the SAML bookstore demo",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "7eab2cfb-a388-452b-b07f-784f329fe467",
+        "attributes": {}
+      },
+      {
+        "name": "book-viewer",
+        "description": "Read-only access to the SAML bookstore demo",
+        "composite": false,
+        "clientRole": false,
+        "containerId": "7eab2cfb-a388-452b-b07f-784f329fe467",
+        "attributes": {}
       }
     ],
     "client": {
@@ -478,6 +494,10 @@
           "value": "123456",
           "temporary": false
         }
+      ],
+      "realmRoles": [
+        "book-admin",
+        "default-roles-test"
       ]
     }
   ],
@@ -1056,6 +1076,98 @@
         "organization",
         "microprofile-jwt"
       ]
+    },
+    {
+      "clientId": "bookstore-saml",
+      "name": "Bookstore SAML Demo",
+      "description": "SAML 2.0 SP demo (Express) on port 3033",
+      "rootUrl": "http://localhost:3033",
+      "baseUrl": "http://localhost:3033",
+      "surrogateAuthRequired": false,
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "redirectUris": [
+        "http://localhost:3033/*"
+      ],
+      "webOrigins": [],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "publicClient": false,
+      "frontchannelLogout": true,
+      "protocol": "saml",
+      "attributes": {
+        "saml.assertion.signature": "true",
+        "saml.server.signature": "true",
+        "saml.client.signature": "false",
+        "saml.encrypt": "false",
+        "saml.authnstatement": "true",
+        "saml.force.post.binding": "true",
+        "saml_name_id_format": "username",
+        "saml_force_name_id_format": "true",
+        "saml.signature.algorithm": "RSA_SHA256",
+        "saml_assertion_consumer_url_post": "http://localhost:3033/saml/acs",
+        "saml_single_logout_service_url_redirect": "http://localhost:3033/saml/logout/callback"
+      },
+      "authenticationFlowBindingOverrides": {},
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "protocolMappers": [
+        {
+          "name": "role list",
+          "protocol": "saml",
+          "protocolMapper": "saml-role-list-mapper",
+          "consentRequired": false,
+          "config": {
+            "single": "true",
+            "attribute.nameformat": "Basic",
+            "attribute.name": "Role"
+          }
+        },
+        {
+          "name": "email",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "friendly.name": "email",
+            "attribute.name": "email",
+            "attribute.nameformat": "Basic"
+          }
+        },
+        {
+          "name": "first name",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "firstName",
+            "friendly.name": "firstName",
+            "attribute.name": "firstName",
+            "attribute.nameformat": "Basic"
+          }
+        },
+        {
+          "name": "last name",
+          "protocol": "saml",
+          "protocolMapper": "saml-user-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "lastName",
+            "friendly.name": "lastName",
+            "attribute.name": "lastName",
+            "attribute.nameformat": "Basic"
+          }
+        }
+      ],
+      "defaultClientScopes": [],
+      "optionalClientScopes": []
     }
   ],
   "clientScopes": [

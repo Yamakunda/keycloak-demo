@@ -18,6 +18,8 @@ shared Keycloak instance (realm `test`) via Docker Compose.
 | bookstore-fe-oauth | [bookstore-fe-oauth/](bookstore-fe-oauth/) | `3022` | React (TS) | Same pattern as `-2`, parallel stack | `test-client-oauth` |
 | bookstore-api-oauth | [bookstore-api-oauth/](bookstore-api-oauth/) | `3023` | Express | Same pattern as `-2`, parallel stack | `test-client-oauth` |
 | razor-demo | [razor-demo/](razor-demo/) | `5100` | ASP.NET Core Razor Pages | `AddOpenIdConnect` (Authorization Code + PKCE), server-side session cookie | `razor-demo-client` |
+| bookstore-saml-fe | [bookstore-saml-fe/](bookstore-saml-fe/) | `3032` | React (TS) | SPA calling a backend that holds the SAML session (httpOnly cookie) | `bookstore-saml` |
+| bookstore-saml-api | [bookstore-saml-api/](bookstore-saml-api/) | `3033` | Express | **SAML 2.0** Service Provider (passport-saml), roles via assertion attribute | `bookstore-saml` |
 | test-keycloak-fe | [test-keycloak-fe/](test-keycloak-fe/) | — | React (TS) | Standalone scratch/test app, not wired into `docker-compose.yml` | — |
 
 Each bookstore pair (`-fe`/`-api`, `-fe-2`/`-api-2`, `-fe-oauth`/`-api-oauth`)
@@ -56,6 +58,7 @@ bookstore-fe/               bookstore-api/            # pure-frontend OAuth demo
 bookstore-fe-2/              bookstore-api-2/          # backend-mediated OAuth demo (port 3012/3013)
 bookstore-fe-oauth/          bookstore-api-oauth/      # parallel OAuth demo stack (port 3022/3023)
 razor-demo/                 # ASP.NET Core Razor Pages OIDC demo (port 5100)
+bookstore-saml-fe/           bookstore-saml-api/       # SAML 2.0 demo, Keycloak as IdP (port 3032/3033)
 test-keycloak-fe/           # standalone scratch app, not in docker-compose
 ```
 
