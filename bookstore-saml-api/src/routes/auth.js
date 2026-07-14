@@ -1,6 +1,7 @@
 const express = require("express");
 const passport = require("passport");
 const config = require("../config");
+const { spCert } = require("../saml");
 const { rolesOf, ensureAuth } = require("../middleware/auth");
 
 // Factory vì router cần strategy đã khởi tạo xong (phải fetch IdP cert trước) —
@@ -24,9 +25,10 @@ module.exports = function buildAuthRouter(samlStrategy) {
     res.redirect(`${config.FRONTEND_URL}?error=login_failed`)
   );
 
-  // SP metadata: dán URL này (hoặc import file) khi cấu hình client trong Keycloak
+  // SP metadata: dán URL này (hoặc import file) khi cấu hình client trong Keycloak.
+  // Kèm signing cert của SP để Keycloak tự điền tab Keys khi import.
   router.get("/metadata", (req, res) => {
-    res.type("application/xml").send(samlStrategy.generateServiceProviderMetadata(null, null));
+    res.type("application/xml").send(samlStrategy.generateServiceProviderMetadata(null, spCert));
   });
 
   // SP-initiated Single Logout: gửi LogoutRequest sang Keycloak

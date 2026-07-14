@@ -1104,7 +1104,7 @@
       "attributes": {
         "saml.assertion.signature": "true",
         "saml.server.signature": "true",
-        "saml.client.signature": "false",
+        "saml.client.signature": "true",
         "saml.encrypt": "false",
         "saml.authnstatement": "true",
         "saml.force.post.binding": "true",
@@ -1112,7 +1112,8 @@
         "saml_force_name_id_format": "true",
         "saml.signature.algorithm": "RSA_SHA256",
         "saml_assertion_consumer_url_post": "http://localhost:3033/saml/acs",
-        "saml_single_logout_service_url_redirect": "http://localhost:3033/saml/logout/callback"
+        "saml_single_logout_service_url_redirect": "http://localhost:3033/saml/logout/callback",
+        "saml.signing.certificate": "MIIDHTCCAgWgAwIBAgIUH0v2Y1Lyz3Uw8oYBfzsR2R/0etswDQYJKoZIhvcNAQELBQAwHjEcMBoGA1UEAwwTYm9va3N0b3JlLXNhbWwtdGVzdDAeFw0yNjA3MTQwNjQyMThaFw0zNjA3MTEwNjQyMThaMB4xHDAaBgNVBAMME2Jvb2tzdG9yZS1zYW1sLXRlc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCPT5soIAME5K8H12RYnj7qdUs0dIVTjzRop+rLsbiu1wRWbR11R2vF2DlaNg8nBJZBN3D5g7fSk3RGEpzOqXFcQH2JyslAUZ12uOrk7LnbKXDtfrq/84yWKux3CNRXEPZ9A19TZ+LoE55e5x21IydEBoKlaC7AbtU6swpUl0dlXenjdImmSMlzm08hEMDSKeq0zs2I/KrG+PT8qhB97K/iLqTtoXA3s33rloPN9xSwkVEPab5p32IRbm9LWgWEn9QpQNDABMoydapLB+q8FgRwsC0JPfLZrBglt4gWDIXovJVWaEy1uvoj8l08I/zme83Q7P/D0392dmoV8BF1C3KDAgMBAAGjUzBRMB0GA1UdDgQWBBTqiF/fWIIcUDfBG4F2V4rApGunWzAfBgNVHSMEGDAWgBTqiF/fWIIcUDfBG4F2V4rApGunWzAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQAiyMzm+sqY36RbmcYHJ+es4sg1QemnTg48iUof9ixHmfcQY6/L6l1DOEhsvZJPvRxciGgpKouVAtVUH3zO3t3x6asUln6aMvjq8tGIMvzJizqHB7IzMuLch5HywGmB3KTPeNYumTDduNWLbt4UdWNW5cS/1R78NcwX14RekUqyVvNIMemEC6dvOEcvwM1YrJrXW5kwmITKB+EAhTpAaow2ZNeEmmINnSZJGf4dBZAikw8w9bs7jbrpPAOUbT7rBCzbdpJa3cvz2rUqM2mbrv3WOhA2mrHOWLKIT4Iea+FN/pbbl29EguyaC9LqW/Yl+6VflJBWNHcEp9qNXnE/sn8l"
       },
       "authenticationFlowBindingOverrides": {},
       "fullScopeAllowed": true,

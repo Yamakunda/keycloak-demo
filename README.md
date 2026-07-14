@@ -32,6 +32,7 @@ Keycloak client so the stacks can run side by side without colliding.
 - **Networking**: all containers share the `keycloak-net` bridge network. Backends and the Razor app add `extra_hosts: localhost:host-gateway` so that token issuer/audience checks against `http://localhost:8080` match what the browser sees.
 - **Secrets/config**: each service reads its Keycloak URL, realm, client ID/secret, and port from its own `.env` (see each folder's `.env.example`) — nothing is hardcoded in `docker-compose.yml`.
 - **Token storage**: the pure-frontend demo (`bookstore-fe`) stores the access token in a browser cookie and calls the API directly; the `-2`/`-oauth` pairs exchange the code for tokens on the backend instead.
+- **SAML**: the `bookstore-saml-fe`/`-api` pair uses SAML 2.0 instead of OAuth — no tokens, the backend holds a session after Keycloak posts a signed assertion. Step-by-step Keycloak SAML client configuration (required vs optional settings) is documented in [bookstore-saml-api/README.md](bookstore-saml-api/README.md#các-bước-cấu-hình-keycloak).
 
 ## Running everything
 
