@@ -60,7 +60,6 @@ router.get("/callback", async (req, res) => {
   if (error) return failFrontend(errorDescription || error);
   if (!code) return failFrontend("Thiếu authorization code");
   if (!state || state !== expectedState) return failFrontend("state không khớp — có thể là CSRF, hủy đăng nhập");
-
   try {
     const tokenRes = await fetch(`${config.KC_BASE}/token`, {
       method: "POST",

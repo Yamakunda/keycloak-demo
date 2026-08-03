@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:theme="@style/Theme.Bookstore"
+        android:usesCleartextTraffic="true">
+        <!-- usesCleartextTraffic: bookstore-api-mobile (BOOKSTORE_API_BASE_URL) chạy HTTP
+             qua IP LAN/10.0.2.2 cho demo. Bỏ khi trỏ backend qua HTTPS thật. -->
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- AppAuth bắt redirect từ Custom Tab qua deep link
+             com.snp.bookstorebio:/oauth2redirect (khớp redirectUris client "biometric-demo") -->
+        <activity
+            android:name="net.openid.appauth.RedirectUriReceiverActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.snp.bookstorebio" android:path="/oauth2redirect" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

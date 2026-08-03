@@ -12,10 +12,23 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HTTP_ENABLED: "true"
+      # Set KC_HOSTNAME=<domain ngrok/cloudflare, vd: xxxx.ngrok-free.app> trước khi
+      # `docker compose up` để WebAuthn rpId khớp origin thật điện thoại đang gọi.
+      # Để trống thì Keycloak tự suy hostname từ request (đủ cho luồng localhost bình thường).
+      KC_HOSTNAME: ${KC_HOSTNAME:-}
+      # ngrok gửi X-Forwarded-Proto/Host (không phải header "Forwarded" chuẩn RFC 7239),
+      # nên phải dùng "xforwarded" để Keycloak nhận đúng scheme https từ ngrok.
+      KC_PROXY_HEADERS: xforwarded
     ports:
       - "8080:8080"
     volumes:
       - ./keycloak-config:/opt/keycloak/data/import
+      - ./keycloak-theme-for-kc-26.0-to-26.1.jar:/opt/keycloak/providers/keycloak-theme.jar
+      # Giữ DB (user, passkey/credential, dữ liệu tạo qua Admin Console) qua các lần
+      # restart/recreate container. Lưu ý: vì import dùng strategy IGNORE_EXISTING,
+      # một khi volume đã có dữ liệu, sửa test-realm.json sẽ KHÔNG tự áp dụng lại —
+      # phải `docker volume rm keycloak_keycloak-db` để ép re-import từ đầu.
+      - keycloak-db:/opt/keycloak/data/h2
     networks:
       - keycloak-net
     healthcheck:
@@ -134,6 +147,23 @@ services:
     networks:
       - keycloak-net
 
+  bookstore-api-mobile:
+    build: ./bookstore-api-mobile
+    container_name: bookstore-api-mobile
+    ports:
+      - "3043:3043"
+    # Backend cho app Android (bookstore-android): verify JWT bằng JWKS,
+    # không cần client_secret vì client passwordless-demo là public client.
+    env_file:
+      - ./bookstore-api-mobile/.env
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
   bookstore-saml-api:
     build: ./bookstore-saml-api
     container_name: bookstore-saml-api
@@ -204,5 +234,6 @@ networks:
     driver: bridge
 
 volumes:
+  keycloak-db:
   openldap-data:
   openldap-config:

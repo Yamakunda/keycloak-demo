@@ -1,0 +1,16 @@
+{
+  "name": "bookstore-api-mobile",
+  "version": "1.0.0",
+  "description": "Bookstore REST API cho Android app — Bearer JWT verify qua Keycloak JWKS (không cần client_secret, phù hợp public client)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.0",
+    "jwks-rsa": "^3.1.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
