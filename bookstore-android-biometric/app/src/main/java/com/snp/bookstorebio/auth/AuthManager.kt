@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.net.toUri
 import com.snp.bookstorebio.BuildConfig
+import net.openid.appauth.AppAuthConfiguration
 import net.openid.appauth.AuthState
 import net.openid.appauth.AuthorizationException
 import net.openid.appauth.AuthorizationRequest
@@ -13,6 +14,25 @@ import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
 import net.openid.appauth.TokenRequest
 import net.openid.appauth.TokenResponse
+import net.openid.appauth.connectivity.ConnectionBuilder
+import java.net.HttpURLConnection
+import java.net.URL
+
+/**
+ * AppAuth mặc định (DefaultConnectionBuilder) chặn cứng mọi kết nối không phải HTTPS ở bước
+ * đổi code/refresh_token lấy token — kể cả khi Manifest đã bật usesCleartextTraffic. Vì demo
+ * này trỏ thẳng IP LAN (http://192.168.x.x:8080) thay vì ngrok HTTPS, cần ConnectionBuilder
+ * riêng bỏ qua check đó. KHÔNG dùng cho build release trỏ backend thật ngoài LAN.
+ */
+private object CleartextConnectionBuilder : ConnectionBuilder {
+    override fun openConnection(uri: android.net.Uri): HttpURLConnection {
+        val connection = URL(uri.toString()).openConnection() as HttpURLConnection
+        connection.connectTimeout = 15_000
+        connection.readTimeout = 15_000
+        connection.instanceFollowRedirects = false
+        return connection
+    }
+}
 
 /**
  * Bọc AppAuth cho luồng "đăng nhập 1 lần, unlock bằng vân tay sau đó":
@@ -25,7 +45,12 @@ import net.openid.appauth.TokenResponse
 class AuthManager(context: Context) {
 
     private val redirectUri = "com.snp.bookstorebio:/oauth2redirect".toUri()
-    private val service = AuthorizationService(context)
+    private val service = AuthorizationService(
+        context,
+        AppAuthConfiguration.Builder()
+            .setConnectionBuilder(CleartextConnectionBuilder)
+            .build(),
+    )
 
     private val serviceConfig = AuthorizationServiceConfiguration(
         "${BuildConfig.KEYCLOAK_BASE_URL}/realms/${BuildConfig.KEYCLOAK_REALM}/protocol/openid-connect/auth".toUri(),

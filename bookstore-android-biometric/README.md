@@ -21,6 +21,22 @@ về vân tay/Face ID — nó chỉ thấy access/refresh token bình thường.
    Keycloak token endpoint với `grant_type=refresh_token` để lấy
    `access_token` mới, **không mở lại Custom Tab, không cần nhập lại mật khẩu**.
 4. Access token mới dùng gọi `bookstore-api-mobile` như bình thường.
+5. Trong màn Books có **công tắc "Đăng nhập bằng vân tay"**: bật → xin vân
+   tay ngay để mã hoá refresh_token hiện tại và lưu vào vault; tắt → xoá
+   vault ngay lập tức (không cần vân tay để tắt). Mặc định tắt — user phải
+   chủ động bật thì lần mở app sau mới tự khoá bằng vân tay.
+6. **Chỉ giữ vân tay cho MỘT tài khoản tại một thời điểm** — tài khoản đăng
+   nhập gần nhất (`last_username` trong `BiometricVault`). Namespace key
+   Keystore/ciphertext theo username là để tách bạch dữ liệu rõ ràng, KHÔNG
+   phải để nhiều tài khoản cùng giữ vân tay song song: mỗi lần đăng nhập
+   thành công một tài khoản KHÁC với tài khoản đang có vault, app tự xoá
+   hẳn vault cũ (xem `onFirstLoginResult` trong `AppViewModel.kt`) trước khi
+   tiếp tục — refresh token cũ không còn dùng được nữa.
+7. **Đăng xuất KHÔNG xoá vault** — chỉ kết thúc session Keycloak hiện tại.
+   Đăng nhập lại ĐÚNG tài khoản đó trên cùng thiết bị vẫn dùng lại được vân
+   tay ngay, không cần bật lại từ đầu. Muốn "quên thiết bị" hẳn, tắt toggle
+   trong màn Books trước khi đăng xuất — thao tác đó xoá key Keystore +
+   ciphertext của tài khoản đang đăng nhập.
 
 ```
 Lần đầu:
@@ -58,7 +74,7 @@ cũng được) vì app phải gọi được token endpoint.
 ```
 app/src/main/java/com/snp/bookstorebio/
 ├── MainActivity.kt          # Compose UI + nơi thực thi BiometricPrompt thật
-├── AppViewModel.kt          # State machine: LoggedOut / LoggingIn / LockedBiometric / LoggedIn
+├── AppViewModel.kt          # State machine: LoggedOut(savedUsername) / LoggingIn / LoggedIn
 ├── auth/AuthManager.kt      # AppAuth: authorization code (lần đầu) + refresh_token grant (các lần sau)
 ├── auth/BiometricVault.kt   # AES key trong Android Keystore, mã hoá/giải mã refresh_token
 ├── network/BookstoreApi.kt  # Gọi GET /api/books với Bearer token
@@ -109,8 +125,19 @@ không bắt buộc HTTPS.
 
 ## Xoá vault / đăng xuất
 
-Bấm "Đăng xuất" trong app: xoá khoá Keystore + ciphertext đã lưu, kết thúc
-SSO session Keycloak. Lần sau mở app phải đăng nhập lại bằng password.
+- Bấm **"Đăng xuất"**: chỉ kết thúc SSO session Keycloak. Vault vân tay của
+  tài khoản đó vẫn còn — đăng nhập lại đúng tài khoản này trên máy vẫn dùng
+  được vân tay ngay lập tức.
+- Tắt **công tắc "Đăng nhập bằng vân tay"** (trong màn Books, trước khi đăng
+  xuất): xoá hẳn khoá Keystore + ciphertext của tài khoản đang đăng nhập —
+  giống "quên thiết bị này" trong các app thực tế. Lần sau đăng nhập lại
+  tài khoản đó sẽ phải nhập password và bật lại vân tay từ đầu.
+- Đăng nhập một tài khoản KHÁC (bấm "Đăng nhập bằng Keycloak" ở màn Login
+  rồi nhập username khác): tự động xoá vault của tài khoản trước đó — máy
+  chỉ giữ vân tay cho tài khoản gần nhất.
+- Reset thủ công (debug/emulator): `adb shell pm clear com.snp.bookstorebio`
+  xoá toàn bộ vault trên app + mọi key Keystore liên quan — tương đương gỡ
+  cài đặt rồi cài lại.
 
 ## Trường hợp đặc biệt: đổi vân tay trên thiết bị
 

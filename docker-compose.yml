@@ -15,7 +15,7 @@ services:
       # Set KC_HOSTNAME=<domain ngrok/cloudflare, vd: xxxx.ngrok-free.app> trước khi
       # `docker compose up` để WebAuthn rpId khớp origin thật điện thoại đang gọi.
       # Để trống thì Keycloak tự suy hostname từ request (đủ cho luồng localhost bình thường).
-      KC_HOSTNAME: ${KC_HOSTNAME:-}
+      # KC_HOSTNAME: ${KC_HOSTNAME:-}
       # ngrok gửi X-Forwarded-Proto/Host (không phải header "Forwarded" chuẩn RFC 7239),
       # nên phải dùng "xforwarded" để Keycloak nhận đúng scheme https từ ngrok.
       KC_PROXY_HEADERS: xforwarded

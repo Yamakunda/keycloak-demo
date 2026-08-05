@@ -15,20 +15,22 @@ import kotlinx.coroutines.withContext
 import net.openid.appauth.AuthState
 
 sealed interface UiState {
-    /** Chưa từng đăng nhập — hoặc vault đã bị xoá (logout / key Keystore bị huỷ). */
-    data object LoggedOut : UiState
+    /**
+     * Chưa đăng nhập. Nếu [savedUsername] khác null, trên máy đã có vault vân tay còn hiệu
+     * lực của đúng tài khoản đó (đăng xuất không xoá vault) — màn Login sẽ hiện thêm nút
+     * "Đăng nhập bằng vân tay" cho tài khoản này, bên cạnh nút đăng nhập Keycloak bình thường.
+     */
+    data class LoggedOut(val savedUsername: String? = null) : UiState
 
     /** Đang mở Custom Tab để đăng nhập lần đầu bằng username/password. */
     data object LoggingIn : UiState
-
-    /** Đã có refresh_token trong vault từ trước — chờ user quét vân tay để unlock. */
-    data object LockedBiometric : UiState
 
     data class LoggedIn(
         val username: String,
         val books: List<Book> = emptyList(),
         val loadingBooks: Boolean = false,
         val error: String? = null,
+        val biometricEnabled: Boolean = false,
     ) : UiState
 }
 
@@ -37,14 +39,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val biometricVault = BiometricVault(application)
     private val api = BookstoreApi()
 
-    private val _uiState = MutableStateFlow<UiState>(UiState.LoggedOut)
+    private val _uiState = MutableStateFlow<UiState>(UiState.LoggedOut())
     val uiState: StateFlow<UiState> = _uiState
 
     private var authState: AuthState? = null
 
     init {
-        // Có refresh_token đã lưu từ lần đăng nhập trước -> chỉ cần vân tay, không mở Custom Tab.
-        _uiState.value = if (biometricVault.hasStoredToken()) UiState.LockedBiometric else UiState.LoggedOut
+        _uiState.value = UiState.LoggedOut(savedUsername = usernameWithUsableVault())
+    }
+
+    /** Tài khoản đăng nhập gần nhất trên máy có vault còn hiệu lực để unlock bằng vân tay, nếu có. */
+    private fun usernameWithUsableVault(): String? {
+        val lastUsername = biometricVault.lastUsername() ?: return null
+        return lastUsername.takeIf {
+            biometricVault.isBiometricEnabled(it) && biometricVault.hasStoredToken(it)
+        }
     }
 
     fun onLoginStarted() {
@@ -54,21 +63,49 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Kết quả từ Custom Tab (lần đăng nhập ĐẦU TIÊN bằng username/password). */
     fun onFirstLoginResult(state: AuthState?) {
         if (state == null) {
-            _uiState.value = UiState.LoggedOut
+            _uiState.value = UiState.LoggedOut(savedUsername = usernameWithUsableVault())
             return
         }
         authState = state
         val username = state.idToken?.let { decodePreferredUsername(it) } ?: "user"
-        _uiState.value = UiState.LoggedIn(username = username)
+
+        // Chỉ giữ TỐI ĐA 1 vault vân tay tại một thời điểm trên máy: đăng nhập một tài khoản
+        // KHÁC với tài khoản đang có vault sẽ xoá hẳn vault cũ, không giữ song song nhiều
+        // tài khoản (khác last_username nghĩa là account cũ, nếu có, không dùng được nữa).
+        val previousUsername = biometricVault.lastUsername()
+        if (previousUsername != null && previousUsername != username) {
+            biometricVault.clear(previousUsername)
+        }
+
+        _uiState.value = UiState.LoggedIn(
+            username = username,
+            biometricEnabled = biometricVault.isBiometricEnabled(username),
+        )
         loadBooks()
-        // Lưu refresh_token vào vault do MainActivity gọi tiếp sau khi có Cipher đã unlock
-        // (xem MainActivity.promptSaveToVault) — ViewModel chỉ giữ authState ở đây.
+        // Nếu tài khoản này đã từng bật vân tay trước đây trên máy, MainActivity sẽ tự
+        // prompt lưu vault ngay sau lần đăng nhập đầu này (xem loginLauncher).
     }
 
     fun pendingRefreshTokenToSave(): String? = authState?.refreshToken
 
+    fun currentUsername(): String? = (_uiState.value as? UiState.LoggedIn)?.username
+
     fun onSavedToVault() {
-        // Không đổi UI state — user đã LoggedIn, chỉ là refresh_token giờ có thêm bản mã hoá.
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        _uiState.value = current.copy(biometricEnabled = true)
+    }
+
+    /** User bấm tắt trong Settings — xoá vault của CHÍNH tài khoản đang đăng nhập, không cần vân tay để tắt. */
+    fun onBiometricDisabled() {
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        biometricVault.clear(current.username)
+        _uiState.value = current.copy(biometricEnabled = false)
+    }
+
+    /** Thiết bị chưa đăng ký vân tay/Face/PIN nào — không thể bật, chỉ báo lỗi, không đổi toggle. */
+    fun onBiometricUnavailable(message: String) {
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        _uiState.value = current.copy(error = message, biometricEnabled = false)
     }
 
     /**
@@ -80,26 +117,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * re-encrypt token mới vào vault ở đây — nhưng việc đó đòi hỏi xin vân tay thêm lần nữa
      * (Cipher ENCRYPT cũng cần setUserAuthenticationRequired), nên demo này cố tình bỏ qua.
      */
-    fun onBiometricUnlocked(refreshToken: String) {
+    fun onBiometricUnlocked(username: String, refreshToken: String) {
         authManager.exchangeRefreshToken(refreshToken) { tokenResponse, exception ->
             if (tokenResponse == null) {
                 // refresh_token hết hạn/bị revoke ở server -> phải đăng nhập lại từ đầu
-                biometricVault.clear()
-                _uiState.value = UiState.LoggedOut
+                biometricVault.clear(username)
+                _uiState.value = UiState.LoggedOut()
                 return@exchangeRefreshToken
             }
             val newAuthState = AuthState().apply { update(tokenResponse, exception) }
             authState = newAuthState
-            val username = newAuthState.idToken?.let { decodePreferredUsername(it) } ?: "user"
-            _uiState.value = UiState.LoggedIn(username = username)
+            val resolvedUsername = newAuthState.idToken?.let { decodePreferredUsername(it) } ?: username
+            _uiState.value = UiState.LoggedIn(username = resolvedUsername, biometricEnabled = true)
             loadBooks()
         }
     }
 
-    /** Key Keystore đã bị Android huỷ (đổi vân tay trên máy) -> vault vô dụng, phải đăng nhập lại. */
-    fun onVaultInvalidated() {
-        biometricVault.clear()
-        _uiState.value = UiState.LoggedOut
+    /** Key Keystore đã bị Android huỷ (đổi vân tay trên máy) -> vault của tài khoản này vô dụng. */
+    fun onVaultInvalidated(username: String) {
+        biometricVault.clear(username)
+        _uiState.value = UiState.LoggedOut()
     }
 
     fun loadBooks() {
@@ -126,11 +163,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun idTokenForLogout(): String? = authState?.idToken
 
-    /** Logout thật: xoá cả session Keycloak lẫn refresh_token trong vault thiết bị. */
+    /**
+     * Logout: kết thúc session Keycloak hiện tại, nhưng KHÔNG xoá vault vân tay của tài
+     * khoản này — giống các app thực tế (banking...), để lần sau đăng nhập lại đúng tài
+     * khoản này trên cùng thiết bị vẫn dùng được vân tay ngay, không cần bật lại từ đầu.
+     * Muốn quên vân tay hẳn, user tắt toggle trong màn Books trước khi đăng xuất.
+     */
     fun onLoggedOut() {
         authState = null
-        biometricVault.clear()
-        _uiState.value = UiState.LoggedOut
+        _uiState.value = UiState.LoggedOut(savedUsername = usernameWithUsableVault())
     }
 
     override fun onCleared() {
