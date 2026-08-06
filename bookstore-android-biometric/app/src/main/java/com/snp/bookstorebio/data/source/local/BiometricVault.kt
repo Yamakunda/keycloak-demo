@@ -1,4 +1,4 @@
-package com.snp.bookstorebio.auth
+package com.snp.bookstorebio.data.source.local
 
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec

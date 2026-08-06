@@ -1,4 +1,4 @@
-package com.snp.bookstorebio
+package com.snp.bookstorebio.presentation.ui
 
 import android.content.Intent
 import android.os.Build
@@ -40,18 +40,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import com.snp.bookstorebio.auth.isKeyInvalidated
+import com.snp.bookstorebio.data.source.local.isKeyInvalidated
+import com.snp.bookstorebio.presentation.viewmodel.AppViewModel
+import com.snp.bookstorebio.presentation.viewmodel.UiState
 import com.snp.bookstorebio.ui.theme.BookstoreTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : FragmentActivity() {
 
     private val viewModel: AppViewModel by viewModels()
 
-    // true khi user vừa được đưa sang màn Settings để đăng ký vân tay — onResume() sẽ tự
-    // kiểm tra lại và bật vault ngay nếu đăng ký thành công, không cần user bấm toggle lần nữa.
     private var awaitingBiometricEnrollment = false
 
-    // Lần đăng nhập ĐẦU: mở Custom Tab, username/password qua Keycloak.
     private val loginLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val data = result.data
         if (data == null) {
@@ -61,10 +62,6 @@ class MainActivity : FragmentActivity() {
         viewModel.authManager.handleAuthorizationResponse(data) { state, _ ->
             runOnUiThread {
                 viewModel.onFirstLoginResult(state)
-                // Dùng startBiometricEnrollmentFlow() thay vì gọi thẳng promptSaveToVault():
-                // setting có thể đã BẬT từ lần đăng nhập trước CỦA CHÍNH TÀI KHOẢN NÀY trên
-                // thiết bị này, nhưng giữa 2 lần đó user có thể đã xoá hết vân tay đã đăng ký
-                // (Settings > Security) -> tạo key Keystore lúc này sẽ crash nếu không re-check.
                 val username = viewModel.currentUsername()
                 if (state != null && username != null && viewModel.biometricVault.isBiometricEnabled(username)) {
                     startBiometricEnrollmentFlow()
@@ -75,15 +72,10 @@ class MainActivity : FragmentActivity() {
 
     private val logoutBrowserLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
 
-    /**
-     * Yêu cầu vân tay MỘT LẦN để mã hoá và lưu refresh_token — gọi ngay sau đăng nhập lần đầu
-     * (nếu setting đã bật sẵn) hoặc khi user bật nút toggle trong màn Books.
-     */
     private fun promptSaveToVault() {
         val refreshToken = viewModel.pendingRefreshTokenToSave()
         val username = viewModel.currentUsername()
         if (refreshToken == null || username == null) {
-            // Không có gì để mã hoá (vd nhỡ gọi khi chưa đăng nhập) -> huỷ bật, tránh state kẹt.
             viewModel.onBiometricDisabled()
             return
         }
@@ -99,8 +91,6 @@ class MainActivity : FragmentActivity() {
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    // User huỷ hoặc lỗi xác thực -> revert toggle về tắt, không để setting bật
-                    // mà vault trống (lần sau mở app sẽ không tự khoá được).
                     viewModel.onBiometricDisabled()
                 }
             }
@@ -111,7 +101,6 @@ class MainActivity : FragmentActivity() {
         )
     }
 
-    /** App vào lại, đã có refresh_token trong vault của "username": xác thực vân tay để giải mã và dùng ngay. */
     private fun promptUnlockVault(username: String) {
         val cipher = try {
             viewModel.biometricVault.decryptCipher(username)
@@ -143,11 +132,6 @@ class MainActivity : FragmentActivity() {
             .setNegativeButtonText("Huỷ")
             .build()
 
-    /**
-     * User bấm bật toggle: kiểm tra thiết bị có sẵn sàng dùng sinh trắc học trước khi tạo
-     * key Keystore (setUserAuthenticationRequired) — tạo key lúc CHƯA đăng ký gì sẽ crash
-     * (InvalidAlgorithmParameterException), nên phải chặn ở đây và hướng dẫn user đi đăng ký.
-     */
     private fun startBiometricEnrollmentFlow() {
         val username = viewModel.currentUsername() ?: return
         val biometricManager = BiometricManager.from(this)
@@ -185,8 +169,6 @@ class MainActivity : FragmentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // User vừa quay lại từ màn Settings đăng ký vân tay (bấm Back hoặc hoàn tất) —
-        // thử lại flow bật toggle mà không cần user bấm lại từ đầu.
         if (awaitingBiometricEnrollment) {
             awaitingBiometricEnrollment = false
             startBiometricEnrollmentFlow()
@@ -272,8 +254,6 @@ private fun LoginScreen(
         Spacer(Modifier.height(8.dp))
 
         if (savedUsername != null) {
-            // Máy này còn vault vân tay còn hiệu lực của tài khoản này (đăng xuất không xoá
-            // vault) -> cho phép unlock thẳng bằng vân tay, không bắt buộc mở lại Custom Tab.
             Spacer(Modifier.height(16.dp))
             Button(onClick = onLoginClick, modifier = Modifier.fillMaxWidth()) {
                 Text("Đăng nhập bằng Keycloak")
