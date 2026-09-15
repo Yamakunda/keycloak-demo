@@ -67,8 +67,19 @@ dependencies {
 
     // Custom Tabs + AppAuth: OAuth2/OIDC Authorization Code + PKCE qua trình duyệt thật.
     // Chỉ dùng ở LẦN ĐĂNG NHẬP ĐẦU để lấy refresh_token ban đầu.
+    // Cũng dùng lại Custom Tabs để mở verification_uri_complete khi quét QR đăng nhập chéo
+    // thiết bị — cùng cookie SSO với Chrome nên Keycloak nhận diện đã đăng nhập, không cần
+    // nhập lại mật khẩu.
     implementation("androidx.browser:browser:1.8.0")
     implementation("net.openid:appauth:0.11.1")
+
+    // Quét QR cho luồng "đăng nhập chéo thiết bị" (OAuth2 Device Authorization Grant):
+    // CameraX cho preview camera + ML Kit Barcode Scanning để decode QR trong khung hình.
+    implementation("androidx.camera:camera-core:1.4.0")
+    implementation("androidx.camera:camera-camera2:1.4.0")
+    implementation("androidx.camera:camera-lifecycle:1.4.0")
+    implementation("androidx.camera:camera-view:1.4.0")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     // Vân tay/Face unlock cục bộ + khóa mã hóa gắn Android Keystore
     implementation("androidx.biometric:biometric:1.2.0-alpha05")

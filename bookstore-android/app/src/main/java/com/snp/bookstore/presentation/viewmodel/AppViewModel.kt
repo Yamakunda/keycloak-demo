@@ -1,18 +1,17 @@
-package com.snp.bookstore
+package com.snp.bookstore.presentation.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.snp.bookstore.auth.AuthManager
-import com.snp.bookstore.auth.TokenStore
-import com.snp.bookstore.model.Book
-import com.snp.bookstore.network.BookstoreApi
-import kotlinx.coroutines.Dispatchers
+import com.snp.bookstore.data.source.local.TokenStore
+import com.snp.bookstore.data.source.remote.AuthManager
+import com.snp.bookstore.domain.model.Book
+import com.snp.bookstore.domain.usecase.GetBooksUseCase
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import net.openid.appauth.AuthState
+import javax.inject.Inject
 
 sealed interface UiState {
     data object LoggedOut : UiState
@@ -25,10 +24,12 @@ sealed interface UiState {
     ) : UiState
 }
 
-class AppViewModel(application: Application) : AndroidViewModel(application) {
-    val authManager = AuthManager(application)
-    private val tokenStore = TokenStore(application)
-    private val api = BookstoreApi()
+@HiltViewModel
+class AppViewModel @Inject constructor(
+    val authManager: AuthManager,
+    private val tokenStore: TokenStore,
+    private val getBooksUseCase: GetBooksUseCase
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow<UiState>(UiState.LoggedOut)
     val uiState: StateFlow<UiState> = _uiState
@@ -67,19 +68,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.value = current.copy(loadingBooks = true, error = null)
 
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { api.fetchBooks(token) }
+            val result = getBooksUseCase(token)
             val latest = (_uiState.value as? UiState.LoggedIn) ?: return@launch
             result.fold(
-                onSuccess = { resp ->
+                onSuccess = { books ->
                     _uiState.value = latest.copy(
-                        books = resp.books,
+                        books = books,
                         loadingBooks = false,
-                        username = resp.authenticatedAs ?: latest.username,
                     )
                 },
-            ) { e ->
-                _uiState.value = latest.copy(loadingBooks = false, error = e.message)
-            }
+                onFailure = { e ->
+                    _uiState.value = latest.copy(loadingBooks = false, error = e.message)
+                }
+            )
         }
     }
 

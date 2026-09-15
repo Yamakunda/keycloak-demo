@@ -1,4 +1,4 @@
-package com.snp.bookstore
+package com.snp.bookstore.presentation.ui
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -31,8 +31,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.snp.bookstore.presentation.viewmodel.AppViewModel
+import com.snp.bookstore.presentation.viewmodel.UiState
 import com.snp.bookstore.ui.theme.BookstoreTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val viewModel: AppViewModel by viewModels()

@@ -1198,6 +1198,49 @@
       ]
     },
     {
+      "clientId": "qr-login-confidential",
+      "name": "QR Cross-Device Login Demo",
+      "description": "Backend-only client (bookstore-api-qr) driving OAuth2 Device Authorization Grant for web-shows-QR / phone-scans-and-approves login",
+      "surrogateAuthRequired": false,
+      "enabled": true,
+      "alwaysDisplayInConsole": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "8cdb63690ed626e792c1b151c96363fc20141b8c5a755ba4",
+      "redirectUris": [],
+      "webOrigins": [],
+      "notBefore": 0,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "publicClient": false,
+      "frontchannelLogout": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "realm_client": "false",
+        "oauth2.device.authorization.grant.enabled": "true",
+        "display.on.consent.screen": "false"
+      },
+      "fullScopeAllowed": true,
+      "nodeReRegistrationTimeout": -1,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "basic",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access",
+        "microprofile-jwt"
+      ]
+    },
+    {
       "clientId": "bookstore-saml",
       "name": "Bookstore SAML Demo",
       "description": "SAML 2.0 SP demo (Express) on port 3033",

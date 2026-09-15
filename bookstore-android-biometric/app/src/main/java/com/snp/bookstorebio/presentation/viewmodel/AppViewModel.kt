@@ -22,6 +22,8 @@ sealed interface UiState {
         val loadingBooks: Boolean = false,
         val error: String? = null,
         val biometricEnabled: Boolean = false,
+        // Đang mở màn hình quét QR để đăng nhập chéo thiết bị (không đăng xuất khỏi phiên hiện tại)
+        val scanningQr: Boolean = false,
     ) : UiState
 }
 
@@ -85,6 +87,16 @@ class AppViewModel @Inject constructor(
         val current = (_uiState.value as? UiState.LoggedIn) ?: return
         biometricVault.clear(current.username)
         _uiState.value = current.copy(biometricEnabled = false)
+    }
+
+    fun onScanQrClicked() {
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        _uiState.value = current.copy(scanningQr = true)
+    }
+
+    fun onQrScanDismissed() {
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        _uiState.value = current.copy(scanningQr = false)
     }
 
     fun onBiometricUnavailable(message: String) {

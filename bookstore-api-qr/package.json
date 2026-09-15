@@ -1,0 +1,14 @@
+{
+  "name": "bookstore-api-qr",
+  "version": "1.0.0",
+  "description": "Backend trung gian cho luồng QR cross-device login (OAuth2 Device Authorization Grant) — giữ client_secret của client confidential qr-login-confidential, web (bookstore-fe-qr) chỉ gọi API này.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.0"
+  }
+}

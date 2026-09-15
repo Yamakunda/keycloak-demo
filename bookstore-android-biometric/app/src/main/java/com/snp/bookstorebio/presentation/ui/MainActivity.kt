@@ -38,9 +38,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import com.snp.bookstorebio.data.source.local.isKeyInvalidated
+import com.snp.bookstorebio.presentation.ui.qr.QrScannerScreen
 import com.snp.bookstorebio.presentation.viewmodel.AppViewModel
 import com.snp.bookstorebio.presentation.viewmodel.UiState
 import com.snp.bookstorebio.ui.theme.BookstoreTheme
@@ -167,6 +170,16 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /**
+     * Mở verification_uri_complete (từ QR của bookstore-fe-qr) bằng Chrome Custom Tabs —
+     * cùng cookie SSO với Chrome mà AuthManager.buildLoginIntent() đã dùng để đăng nhập, nên
+     * Keycloak nhận diện phiên có sẵn và hiện thẳng trang "Confirm device login", không cần
+     * nhập lại mật khẩu.
+     */
+    private fun openQrVerificationUrl(url: String) {
+        CustomTabsIntent.Builder().build().launchUrl(this, url.toUri())
+    }
+
     override fun onResume() {
         super.onResume()
         if (awaitingBiometricEnrollment) {
@@ -198,7 +211,13 @@ class MainActivity : FragmentActivity() {
                             } else {
                                 viewModel.onBiometricDisabled()
                             }
-                        }
+                        },
+                        onScanQrClick = { viewModel.onScanQrClicked() },
+                        onQrDetected = { url ->
+                            viewModel.onQrScanDismissed()
+                            openQrVerificationUrl(url)
+                        },
+                        onQrScanCancel = { viewModel.onQrScanDismissed() },
                     )
                 }
             }
@@ -213,7 +232,10 @@ fun BookstoreApp(
     onLoginClick: () -> Unit,
     onUnlockClick: (String) -> Unit,
     onLogoutClick: () -> Unit,
-    onBiometricToggle: (Boolean) -> Unit
+    onBiometricToggle: (Boolean) -> Unit,
+    onScanQrClick: () -> Unit,
+    onQrDetected: (String) -> Unit,
+    onQrScanCancel: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
 
@@ -228,12 +250,20 @@ fun BookstoreApp(
                     onUnlockClick = { username -> onUnlockClick(username) },
                 )
                 is UiState.LoggingIn -> LoadingScreen("Đang mở trang đăng nhập…")
-                is UiState.LoggedIn -> BooksScreen(
-                    state = s,
-                    onRefresh = { viewModel.loadBooks() },
-                    onLogout = onLogoutClick,
-                    onBiometricToggle = onBiometricToggle
-                )
+                is UiState.LoggedIn -> if (s.scanningQr) {
+                    QrScannerScreen(
+                        onQrDetected = onQrDetected,
+                        onCancel = onQrScanCancel,
+                    )
+                } else {
+                    BooksScreen(
+                        state = s,
+                        onRefresh = { viewModel.loadBooks() },
+                        onLogout = onLogoutClick,
+                        onBiometricToggle = onBiometricToggle,
+                        onScanQrClick = onScanQrClick,
+                    )
+                }
             }
         }
     }
@@ -293,7 +323,8 @@ private fun BooksScreen(
     state: UiState.LoggedIn,
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
-    onBiometricToggle: (Boolean) -> Unit
+    onBiometricToggle: (Boolean) -> Unit,
+    onScanQrClick: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Xin chào, ${state.username}", style = MaterialTheme.typography.titleMedium)
@@ -333,6 +364,10 @@ private fun BooksScreen(
         Column {
             OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) {
                 Text("Làm mới")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = onScanQrClick, modifier = Modifier.fillMaxWidth()) {
+                Text("Quét QR để đăng nhập thiết bị khác")
             }
             Spacer(Modifier.height(8.dp))
             Button(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {

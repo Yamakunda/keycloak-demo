@@ -1,4 +1,4 @@
-package com.snp.bookstore.auth
+package com.snp.bookstore.data.source.local
 
 import android.content.Context
 import androidx.core.content.edit

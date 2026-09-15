@@ -15,7 +15,7 @@ services:
       # Set KC_HOSTNAME=<domain ngrok/cloudflare, vd: xxxx.ngrok-free.app> trước khi
       # `docker compose up` để WebAuthn rpId khớp origin thật điện thoại đang gọi.
       # Để trống thì Keycloak tự suy hostname từ request (đủ cho luồng localhost bình thường).
-      # KC_HOSTNAME: ${KC_HOSTNAME:-}
+      KC_HOSTNAME: ${KC_HOSTNAME:-}
       # ngrok gửi X-Forwarded-Proto/Host (không phải header "Forwarded" chuẩn RFC 7239),
       # nên phải dùng "xforwarded" để Keycloak nhận đúng scheme https từ ngrok.
       KC_PROXY_HEADERS: xforwarded
@@ -158,6 +158,37 @@ services:
       - ./bookstore-api-mobile/.env
     extra_hosts:
       - "localhost:host-gateway"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
+  bookstore-api-qr:
+    build: ./bookstore-api-qr
+    container_name: bookstore-api-qr
+    ports:
+      - "3053:3053"
+    # Backend trung gian cho QR cross-device login (OAuth2 Device Authorization Grant):
+    # giữ client_secret của client confidential qr-login-confidential, FE (bookstore-fe-qr)
+    # chỉ gọi API này, không đụng Keycloak trực tiếp.
+    env_file:
+      - ./bookstore-api-qr/.env
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
+  bookstore-fe-qr:
+    build: ./bookstore-fe-qr
+    container_name: bookstore-fe-qr
+    # SPA static: hiển thị QR (verification_uri_complete) và poll bookstore-api-qr
+    # cho tới khi điện thoại (bookstore-android-biometric) quét & approve xong.
+    ports:
+      - "3052:3052"
     depends_on:
       keycloak:
         condition: service_healthy

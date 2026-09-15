@@ -1,0 +1,4 @@
+node_modules/
+*.md
+# env cấp lúc runtime qua compose env_file, không bake vào image
+.env

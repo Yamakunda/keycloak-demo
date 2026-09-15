@@ -1,11 +1,9 @@
-package com.snp.bookstore.model
+package com.snp.bookstore.data.source.remote.dto
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.InternalSerializationApi
 
-@OptIn(InternalSerializationApi::class)
 @Serializable
-data class Book(
+data class BookDto(
     val id: Int,
     val title: String,
     val author: String,
@@ -14,11 +12,9 @@ data class Book(
     val cover: String? = null,
 )
 
-
-@OptIn(InternalSerializationApi::class)
 @Serializable
-data class BooksResponse(
+data class BooksResponseDto(
     val total: Int,
     val authenticatedAs: String? = null,
-    val books: List<Book>,
+    val books: List<BookDto>,
 )

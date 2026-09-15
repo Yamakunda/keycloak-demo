@@ -1,4 +1,4 @@
-package com.snp.bookstore.auth
+package com.snp.bookstore.data.source.remote
 
 import android.content.Context
 import android.content.Intent
