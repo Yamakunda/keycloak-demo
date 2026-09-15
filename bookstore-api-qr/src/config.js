@@ -27,4 +27,7 @@ module.exports = {
   get TOKEN_ENDPOINT() {
     return `${this.ISSUER}/protocol/openid-connect/token`;
   },
+  get JWKS_URI() {
+    return `${this.ISSUER}/protocol/openid-connect/certs`;
+  },
 };

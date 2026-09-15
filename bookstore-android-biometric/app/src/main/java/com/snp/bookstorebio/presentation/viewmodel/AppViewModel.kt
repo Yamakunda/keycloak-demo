@@ -4,14 +4,24 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.snp.bookstorebio.data.source.local.BiometricVault
 import com.snp.bookstorebio.data.source.remote.AuthManager
+import com.snp.bookstorebio.data.source.remote.QrLoginApi
 import com.snp.bookstorebio.domain.model.Book
 import com.snp.bookstorebio.domain.usecase.GetBooksUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import net.openid.appauth.AuthState
 import javax.inject.Inject
+
+sealed interface QrApproveResult {
+    data object Approving : QrApproveResult
+    data object Success : QrApproveResult
+    data class Failed(val message: String) : QrApproveResult
+}
 
 sealed interface UiState {
     data class LoggedOut(val savedUsername: String? = null) : UiState
@@ -24,6 +34,7 @@ sealed interface UiState {
         val biometricEnabled: Boolean = false,
         // Đang mở màn hình quét QR để đăng nhập chéo thiết bị (không đăng xuất khỏi phiên hiện tại)
         val scanningQr: Boolean = false,
+        val qrApproveResult: QrApproveResult? = null,
     ) : UiState
 }
 
@@ -31,7 +42,8 @@ sealed interface UiState {
 class AppViewModel @Inject constructor(
     val authManager: AuthManager,
     val biometricVault: BiometricVault,
-    private val getBooksUseCase: GetBooksUseCase
+    private val getBooksUseCase: GetBooksUseCase,
+    private val qrLoginApi: QrLoginApi,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<UiState>(UiState.LoggedOut())
@@ -97,6 +109,61 @@ class AppViewModel @Inject constructor(
     fun onQrScanDismissed() {
         val current = (_uiState.value as? UiState.LoggedIn) ?: return
         _uiState.value = current.copy(scanningQr = false)
+    }
+
+    fun onQrApproveResultDismissed() {
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        _uiState.value = current.copy(qrApproveResult = null)
+    }
+
+    /**
+     * QR của bookstore-fe-qr chứa JSON {"apiUrl": "...", "sessionId": "..."}. App tự gọi
+     * bookstore-api-qr bằng access_token nó đang có (KHÔNG mở Custom Tabs) để approve phiên
+     * — loại bỏ hẳn bước phải đăng nhập/xác nhận lại trên trình duyệt.
+     */
+    fun onQrCodeScanned(rawValue: String) {
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        _uiState.value = current.copy(scanningQr = false, qrApproveResult = QrApproveResult.Approving)
+
+        val accessToken = authState?.accessToken
+        if (accessToken == null) {
+            _uiState.value = current.copy(
+                scanningQr = false,
+                qrApproveResult = QrApproveResult.Failed("Phiên đăng nhập đã hết hạn, hãy đăng nhập lại."),
+            )
+            return
+        }
+
+        val parsed = runCatching {
+            val obj = Json.parseToJsonElement(rawValue).jsonObject
+            val apiUrl = obj["apiUrl"]?.jsonPrimitive?.content ?: error("Thiếu apiUrl")
+            val sessionId = obj["sessionId"]?.jsonPrimitive?.content ?: error("Thiếu sessionId")
+            apiUrl to sessionId
+        }.getOrNull()
+
+        if (parsed == null) {
+            _uiState.value = (_uiState.value as UiState.LoggedIn).copy(
+                qrApproveResult = QrApproveResult.Failed("Mã QR không hợp lệ."),
+            )
+            return
+        }
+        val (apiUrl, sessionId) = parsed
+
+        viewModelScope.launch {
+            val result = qrLoginApi.approve(
+                apiUrl = apiUrl,
+                sessionId = sessionId,
+                accessToken = accessToken,
+                refreshToken = authState?.refreshToken,
+                expiresIn = null,
+                scope = authState?.scope,
+            )
+            val latest = (_uiState.value as? UiState.LoggedIn) ?: return@launch
+            _uiState.value = result.fold(
+                onSuccess = { latest.copy(qrApproveResult = QrApproveResult.Success) },
+                onFailure = { e -> latest.copy(qrApproveResult = QrApproveResult.Failed(e.message ?: "Lỗi không xác định")) },
+            )
+        }
     }
 
     fun onBiometricUnavailable(message: String) {

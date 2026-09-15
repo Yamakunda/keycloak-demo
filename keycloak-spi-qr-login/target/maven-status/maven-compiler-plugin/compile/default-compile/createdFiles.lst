@@ -1,0 +1,9 @@
+com/snp/keycloak/qrlogin/TokenIntrospection$Result.class
+com/snp/keycloak/qrlogin/QrLoginSessionStore$Session.class
+com/snp/keycloak/qrlogin/QrLoginAuthenticator.class
+com/snp/keycloak/qrlogin/QrLoginResourceProvider.class
+com/snp/keycloak/qrlogin/QrLoginResourceProviderFactory.class
+com/snp/keycloak/qrlogin/TokenIntrospection.class
+com/snp/keycloak/qrlogin/QrLoginSessionStore.class
+com/snp/keycloak/qrlogin/QrLoginAuthenticatorFactory.class
+com/snp/keycloak/qrlogin/TokenIssuer.class

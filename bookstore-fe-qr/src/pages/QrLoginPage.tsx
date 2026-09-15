@@ -1,19 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
-  DeviceStartResponse,
+  QrStartResponse,
   TokenResponse,
-  pollDeviceLogin,
-  startDeviceLogin,
-} from "../services/deviceService";
+  pollQrSession,
+  startQrSession,
+} from "../services/qrSessionService";
+import { API_URL } from "../config/api";
 import { Book, getBooks } from "../services/bookService";
-import { decodePreferredUsername } from "../utils/jwt";
 
-type Phase = "loading" | "ready" | "approved" | "expired" | "denied" | "error";
+type Phase = "loading" | "ready" | "approved" | "expired" | "error";
+
+const POLL_INTERVAL_MS = 2000;
 
 export default function QrLoginPage() {
   const [phase, setPhase] = useState<Phase>("loading");
-  const [device, setDevice] = useState<DeviceStartResponse | null>(null);
+  const [session, setSession] = useState<QrStartResponse | null>(null);
   const [token, setToken] = useState<TokenResponse | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
@@ -40,8 +42,8 @@ export default function QrLoginPage() {
     setBooks([]);
     setBooksError("");
     try {
-      const started = await startDeviceLogin();
-      setDevice(started);
+      const started = await startQrSession();
+      setSession(started);
       setSecondsLeft(started.expires_in);
       setPhase("ready");
     } catch (e) {
@@ -56,15 +58,16 @@ export default function QrLoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Vẽ QR mỗi khi có device mới
+  // Vẽ QR mỗi khi có session mới — encode JSON để app biết gọi API nào + session_id nào
   useEffect(() => {
-    if (device && canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, device.verification_uri_complete, {
+    if (session && canvasRef.current) {
+      const payload = JSON.stringify({ apiUrl: API_URL, sessionId: session.session_id });
+      QRCode.toCanvas(canvasRef.current, payload, {
         width: 240,
         margin: 1,
       });
     }
-  }, [device]);
+  }, [session]);
 
   // Đếm ngược hết hạn QR
   useEffect(() => {
@@ -78,46 +81,40 @@ export default function QrLoginPage() {
     return () => clearTimeout(t);
   }, [phase, secondsLeft]);
 
-  // Polling trạng thái device code
+  // Polling trạng thái session — app tự approve bằng access_token nó có sẵn, không cần
+  // mở trình duyệt để bấm xác nhận như Device Authorization Grant chuẩn.
   useEffect(() => {
-    if (phase !== "ready" || !device) return;
+    if (phase !== "ready" || !session) return;
 
     let cancelled = false;
-    let interval = device.interval * 1000;
 
     const tick = async () => {
-      const result = await pollDeviceLogin(device.device_code);
+      const result = await pollQrSession(session.session_id);
       if (cancelled) return;
 
       switch (result.status) {
         case "approved":
           setToken(result.token);
-          setUsername(decodePreferredUsername(result.token.access_token));
+          setUsername(result.username);
           setPhase("approved");
           return;
         case "expired":
           setPhase("expired");
           return;
-        case "denied":
-          setPhase("denied");
-          return;
-        case "slow_down":
-          interval += 5000;
-          break;
         case "pending":
         default:
           break;
       }
-      pollTimer.current = setTimeout(tick, interval);
+      pollTimer.current = setTimeout(tick, POLL_INTERVAL_MS);
     };
 
-    pollTimer.current = setTimeout(tick, interval);
+    pollTimer.current = setTimeout(tick, POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       clearPollTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, device]);
+  }, [phase, session]);
 
   // Sau khi đăng nhập thành công, tải danh sách sách bằng access token vừa nhận
   useEffect(() => {
@@ -204,12 +201,9 @@ export default function QrLoginPage() {
 
         {errorMsg && <div className="alert">{errorMsg}</div>}
 
-        {phase === "ready" && device && (
+        {phase === "ready" && session && (
           <>
             <canvas ref={canvasRef} style={{ margin: "0 auto", display: "block" }} />
-            <p className="hint">
-              Hoặc nhập mã: <code>{device.user_code}</code>
-            </p>
             <p className="hint">Mã hết hạn sau {secondsLeft}s</p>
           </>
         )}
@@ -219,15 +213,6 @@ export default function QrLoginPage() {
             <div className="alert">Mã QR đã hết hạn.</div>
             <button className="btn btn-blue" onClick={begin}>
               Tạo mã mới
-            </button>
-          </>
-        )}
-
-        {phase === "denied" && (
-          <>
-            <div className="alert">Yêu cầu đăng nhập đã bị từ chối.</div>
-            <button className="btn btn-blue" onClick={begin}>
-              Thử lại
             </button>
           </>
         )}

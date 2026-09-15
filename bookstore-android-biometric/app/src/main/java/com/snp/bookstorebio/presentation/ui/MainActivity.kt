@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,14 +39,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.browser.customtabs.CustomTabsClient
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import com.snp.bookstorebio.data.source.local.isKeyInvalidated
 import com.snp.bookstorebio.presentation.ui.qr.QrScannerScreen
 import com.snp.bookstorebio.presentation.viewmodel.AppViewModel
+import com.snp.bookstorebio.presentation.viewmodel.QrApproveResult
 import com.snp.bookstorebio.presentation.viewmodel.UiState
 import com.snp.bookstorebio.ui.theme.BookstoreTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -171,25 +170,6 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    /**
-     * Mở verification_uri_complete (từ QR của bookstore-fe-qr) bằng Chrome Custom Tabs —
-     * cùng cookie SSO với Chrome mà AuthManager.buildLoginIntent() đã dùng để đăng nhập, nên
-     * Keycloak nhận diện phiên có sẵn và hiện thẳng trang "Confirm device login", không cần
-     * nhập lại mật khẩu.
-     */
-    private fun openQrVerificationUrl(url: String) {
-        // Chỉ định rõ package Custom Tabs — nếu không, Android có thể resolve khác trình
-        // duyệt so với lần AppAuth mở Custom Tab lúc đăng nhập đầu (khi máy có > 1 browser
-        // hỗ trợ Custom Tabs), khiến cookie SSO không được share, phải đăng nhập lại từ đầu.
-        val customTabsPackage = CustomTabsClient.getPackageName(this, null)
-        val builder = CustomTabsIntent.Builder()
-        val intent = builder.build()
-        if (customTabsPackage != null) {
-            intent.intent.setPackage(customTabsPackage)
-        }
-        intent.launchUrl(this, url.toUri())
-    }
-
     override fun onResume() {
         super.onResume()
         if (awaitingBiometricEnrollment) {
@@ -223,11 +203,9 @@ class MainActivity : FragmentActivity() {
                             }
                         },
                         onScanQrClick = { viewModel.onScanQrClicked() },
-                        onQrDetected = { url ->
-                            viewModel.onQrScanDismissed()
-                            openQrVerificationUrl(url)
-                        },
+                        onQrDetected = { rawValue -> viewModel.onQrCodeScanned(rawValue) },
                         onQrScanCancel = { viewModel.onQrScanDismissed() },
+                        onQrApproveResultDismiss = { viewModel.onQrApproveResultDismissed() },
                     )
                 }
             }
@@ -246,6 +224,7 @@ fun BookstoreApp(
     onScanQrClick: () -> Unit,
     onQrDetected: (String) -> Unit,
     onQrScanCancel: () -> Unit,
+    onQrApproveResultDismiss: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
 
@@ -272,6 +251,7 @@ fun BookstoreApp(
                         onLogout = onLogoutClick,
                         onBiometricToggle = onBiometricToggle,
                         onScanQrClick = onScanQrClick,
+                        onQrApproveResultDismiss = onQrApproveResultDismiss,
                     )
                 }
             }
@@ -335,7 +315,12 @@ private fun BooksScreen(
     onLogout: () -> Unit,
     onBiometricToggle: (Boolean) -> Unit,
     onScanQrClick: () -> Unit,
+    onQrApproveResultDismiss: () -> Unit,
 ) {
+    state.qrApproveResult?.let { result ->
+        QrApproveResultDialog(result = result, onDismiss = onQrApproveResultDismiss)
+    }
+
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Xin chào, ${state.username}", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
@@ -384,5 +369,38 @@ private fun BooksScreen(
                 Text("Đăng xuất")
             }
         }
+    }
+}
+
+@Composable
+private fun QrApproveResultDialog(
+    result: QrApproveResult,
+    onDismiss: () -> Unit,
+) {
+    when (result) {
+        is QrApproveResult.Approving -> AlertDialog(
+            onDismissRequest = {},
+            confirmButton = {},
+            title = { Text("Đang xác nhận…") },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.height(20.dp).fillMaxWidth(0.2f))
+                    Spacer(Modifier.height(8.dp))
+                    Text("Đang đăng nhập giúp thiết bị kia…")
+                }
+            },
+        )
+        is QrApproveResult.Success -> AlertDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = { Button(onClick = onDismiss) { Text("OK") } },
+            title = { Text("Thành công") },
+            text = { Text("Đã đăng nhập giúp thiết bị kia. Kiểm tra lại trên trình duyệt.") },
+        )
+        is QrApproveResult.Failed -> AlertDialog(
+            onDismissRequest = onDismiss,
+            confirmButton = { Button(onClick = onDismiss) { Text("Đóng") } },
+            title = { Text("Thất bại") },
+            text = { Text(result.message) },
+        )
     }
 }

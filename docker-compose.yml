@@ -24,6 +24,7 @@ services:
     volumes:
       - ./keycloak-config:/opt/keycloak/data/import
       - ./keycloak-theme-for-kc-26.0-to-26.1.jar:/opt/keycloak/providers/keycloak-theme.jar
+      - ./keycloak-spi-qr-login/target/qr-login-spi.jar:/opt/keycloak/providers/qr-login-spi.jar
       # Giữ DB (user, passkey/credential, dữ liệu tạo qua Admin Console) qua các lần
       # restart/recreate container. Lưu ý: vì import dùng strategy IGNORE_EXISTING,
       # một khi volume đã có dữ liệu, sửa test-realm.json sẽ KHÔNG tự áp dụng lại —

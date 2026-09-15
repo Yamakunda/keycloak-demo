@@ -4,6 +4,7 @@ import android.content.Context
 import com.snp.bookstorebio.data.source.local.BiometricVault
 import com.snp.bookstorebio.data.source.remote.AuthManager
 import com.snp.bookstorebio.data.source.remote.BookstoreApi
+import com.snp.bookstorebio.data.source.remote.QrLoginApi
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -31,5 +32,11 @@ object AppModule {
     @Singleton
     fun provideBookstoreApi(): BookstoreApi {
         return BookstoreApi()
+    }
+
+    @Provides
+    @Singleton
+    fun provideQrLoginApi(): QrLoginApi {
+        return QrLoginApi()
     }
 }
