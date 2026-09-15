@@ -11,18 +11,28 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 
 /**
- * Gọi endpoint REST SPI chạy ngay trong Keycloak (/realms/{realm}/qr-login/approve) để tự
- * động "approve" phiên đăng nhập QR hiện trên trang login Keycloak, bằng access_token app
- * đã có sẵn (từ Authorization Code + PKCE lúc đăng nhập đầu) — không cần mở Custom Tabs hay
- * đăng nhập lại. apiUrl lấy từ chính nội dung mã QR (chính là base URL của realm) nên không
- * cần hardcode BuildConfig ở đây.
+ * Có 2 nguồn QR song song, khác endpoint approve:
+ *  - LEGACY: QR vẽ bởi bookstore-fe-qr (web thường ngoài Keycloak) → bookstore-api-qr,
+ *    route "/qr/approve" (Node.js, giữ client_secret của qr-login-confidential).
+ *  - KEYCLOAK_SPI: QR vẽ bởi qr-login.ftl (ngay trên trang login mặc định của Keycloak,
+ *    qua "Try another way") → chạy thẳng trong Keycloak, route "/qr-login/approve"
+ *    (keycloak-spi-qr-login, dùng TokenManager nội bộ để issue token).
+ * Cả hai cùng định dạng JSON {"apiUrl":..., "sessionId":...} nên người dùng phải tự chọn
+ * đúng nút quét tương ứng với UI đang hiển thị trên thiết bị kia — apiUrl chỉ khác base URL
+ * (bookstore-api-qr vs Keycloak realm) nên không tự suy ra chắc chắn 100% được.
  */
+enum class QrLoginMode(val approvePath: String) {
+    LEGACY("/qr/approve"),
+    KEYCLOAK_SPI("/qr-login/approve"),
+}
+
 class QrLoginApi {
     private val client = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
     private val jsonMediaType = "application/json".toMediaType()
 
     suspend fun approve(
+        mode: QrLoginMode,
         apiUrl: String,
         sessionId: String,
         accessToken: String,
@@ -42,7 +52,7 @@ class QrLoginApi {
             )
         )
         val request = Request.Builder()
-            .url("$apiUrl/qr-login/approve")
+            .url("$apiUrl${mode.approvePath}")
             .header("Authorization", "Bearer $accessToken")
             .post(body.toRequestBody(jsonMediaType))
             .build()

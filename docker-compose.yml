@@ -196,6 +196,22 @@ services:
     networks:
       - keycloak-net
 
+  bookstore-fe-qr-2:
+    build: ./bookstore-fe-qr-2
+    container_name: bookstore-fe-qr-2
+    # SPA static: OAuth client public thật (Authorization Code + PKCE, client
+    # test-qr-web-2), redirect thẳng vào trang login mặc định của Keycloak để test
+    # Authenticator SPI "Đăng nhập bằng QR" qua cơ chế "Try another way" —
+    # xem ../keycloak-spi-qr-login. Khác bookstore-fe-qr (tự vẽ QR bằng JS, không đụng
+    # trang login Keycloak).
+    ports:
+      - "3060:3060"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
   bookstore-saml-api:
     build: ./bookstore-saml-api
     container_name: bookstore-saml-api

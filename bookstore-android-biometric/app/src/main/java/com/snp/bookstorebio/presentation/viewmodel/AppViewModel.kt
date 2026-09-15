@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.snp.bookstorebio.data.source.local.BiometricVault
 import com.snp.bookstorebio.data.source.remote.AuthManager
 import com.snp.bookstorebio.data.source.remote.QrLoginApi
+import com.snp.bookstorebio.data.source.remote.QrLoginMode
 import com.snp.bookstorebio.domain.model.Book
 import com.snp.bookstorebio.domain.usecase.GetBooksUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -32,8 +33,10 @@ sealed interface UiState {
         val loadingBooks: Boolean = false,
         val error: String? = null,
         val biometricEnabled: Boolean = false,
-        // Đang mở màn hình quét QR để đăng nhập chéo thiết bị (không đăng xuất khỏi phiên hiện tại)
-        val scanningQr: Boolean = false,
+        // Đang mở màn hình quét QR để đăng nhập chéo thiết bị (không đăng xuất khỏi phiên
+        // hiện tại) — null nghĩa là không quét; khác null cho biết đang quét cho nguồn QR
+        // nào (web thường hay trang login Keycloak) để gọi đúng endpoint approve.
+        val scanningQrMode: QrLoginMode? = null,
         val qrApproveResult: QrApproveResult? = null,
     ) : UiState
 }
@@ -101,14 +104,14 @@ class AppViewModel @Inject constructor(
         _uiState.value = current.copy(biometricEnabled = false)
     }
 
-    fun onScanQrClicked() {
+    fun onScanQrClicked(mode: QrLoginMode) {
         val current = (_uiState.value as? UiState.LoggedIn) ?: return
-        _uiState.value = current.copy(scanningQr = true)
+        _uiState.value = current.copy(scanningQrMode = mode)
     }
 
     fun onQrScanDismissed() {
         val current = (_uiState.value as? UiState.LoggedIn) ?: return
-        _uiState.value = current.copy(scanningQr = false)
+        _uiState.value = current.copy(scanningQrMode = null)
     }
 
     fun onQrApproveResultDismissed() {
@@ -117,18 +120,21 @@ class AppViewModel @Inject constructor(
     }
 
     /**
-     * QR của bookstore-fe-qr chứa JSON {"apiUrl": "...", "sessionId": "..."}. App tự gọi
-     * bookstore-api-qr bằng access_token nó đang có (KHÔNG mở Custom Tabs) để approve phiên
-     * — loại bỏ hẳn bước phải đăng nhập/xác nhận lại trên trình duyệt.
+     * Cả 2 nguồn QR (web thường qua bookstore-fe-qr, hoặc trang login Keycloak qua SPI) đều
+     * chứa cùng định dạng JSON {"apiUrl": "...", "sessionId": "..."} — chỉ khác path approve
+     * cuối cùng, chọn theo mode người dùng đã bấm nút trước khi quét. App tự gọi endpoint
+     * tương ứng bằng access_token nó đang có (KHÔNG mở Custom Tabs) để approve phiên — loại
+     * bỏ hẳn bước phải đăng nhập/xác nhận lại trên trình duyệt.
      */
     fun onQrCodeScanned(rawValue: String) {
         val current = (_uiState.value as? UiState.LoggedIn) ?: return
-        _uiState.value = current.copy(scanningQr = false, qrApproveResult = QrApproveResult.Approving)
+        val mode = current.scanningQrMode ?: return
+        _uiState.value = current.copy(scanningQrMode = null, qrApproveResult = QrApproveResult.Approving)
 
         val accessToken = authState?.accessToken
         if (accessToken == null) {
             _uiState.value = current.copy(
-                scanningQr = false,
+                scanningQrMode = null,
                 qrApproveResult = QrApproveResult.Failed("Phiên đăng nhập đã hết hạn, hãy đăng nhập lại."),
             )
             return
@@ -151,6 +157,7 @@ class AppViewModel @Inject constructor(
 
         viewModelScope.launch {
             val result = qrLoginApi.approve(
+                mode = mode,
                 apiUrl = apiUrl,
                 sessionId = sessionId,
                 accessToken = accessToken,

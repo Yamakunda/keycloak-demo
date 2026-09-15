@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.snp.bookstorebio.data.source.local.isKeyInvalidated
+import com.snp.bookstorebio.data.source.remote.QrLoginMode
 import com.snp.bookstorebio.presentation.ui.qr.QrScannerScreen
 import com.snp.bookstorebio.presentation.viewmodel.AppViewModel
 import com.snp.bookstorebio.presentation.viewmodel.QrApproveResult
@@ -202,7 +203,7 @@ class MainActivity : FragmentActivity() {
                                 viewModel.onBiometricDisabled()
                             }
                         },
-                        onScanQrClick = { viewModel.onScanQrClicked() },
+                        onScanQrClick = { mode -> viewModel.onScanQrClicked(mode) },
                         onQrDetected = { rawValue -> viewModel.onQrCodeScanned(rawValue) },
                         onQrScanCancel = { viewModel.onQrScanDismissed() },
                         onQrApproveResultDismiss = { viewModel.onQrApproveResultDismissed() },
@@ -221,7 +222,7 @@ fun BookstoreApp(
     onUnlockClick: (String) -> Unit,
     onLogoutClick: () -> Unit,
     onBiometricToggle: (Boolean) -> Unit,
-    onScanQrClick: () -> Unit,
+    onScanQrClick: (QrLoginMode) -> Unit,
     onQrDetected: (String) -> Unit,
     onQrScanCancel: () -> Unit,
     onQrApproveResultDismiss: () -> Unit,
@@ -239,7 +240,7 @@ fun BookstoreApp(
                     onUnlockClick = { username -> onUnlockClick(username) },
                 )
                 is UiState.LoggingIn -> LoadingScreen("Đang mở trang đăng nhập…")
-                is UiState.LoggedIn -> if (s.scanningQr) {
+                is UiState.LoggedIn -> if (s.scanningQrMode != null) {
                     QrScannerScreen(
                         onQrDetected = onQrDetected,
                         onCancel = onQrScanCancel,
@@ -314,7 +315,7 @@ private fun BooksScreen(
     onRefresh: () -> Unit,
     onLogout: () -> Unit,
     onBiometricToggle: (Boolean) -> Unit,
-    onScanQrClick: () -> Unit,
+    onScanQrClick: (QrLoginMode) -> Unit,
     onQrApproveResultDismiss: () -> Unit,
 ) {
     state.qrApproveResult?.let { result ->
@@ -361,8 +362,18 @@ private fun BooksScreen(
                 Text("Làm mới")
             }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onScanQrClick, modifier = Modifier.fillMaxWidth()) {
-                Text("Quét QR để đăng nhập thiết bị khác")
+            OutlinedButton(
+                onClick = { onScanQrClick(QrLoginMode.LEGACY) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Quét QR trên trang web thường")
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = { onScanQrClick(QrLoginMode.KEYCLOAK_SPI) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Quét QR trên trang đăng nhập Keycloak")
             }
             Spacer(Modifier.height(8.dp))
             Button(onClick = onLogout, modifier = Modifier.fillMaxWidth()) {
