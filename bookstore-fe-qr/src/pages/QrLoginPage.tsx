@@ -6,6 +6,8 @@ import {
   pollDeviceLogin,
   startDeviceLogin,
 } from "../services/deviceService";
+import { Book, getBooks } from "../services/bookService";
+import { decodePreferredUsername } from "../utils/jwt";
 
 type Phase = "loading" | "ready" | "approved" | "expired" | "denied" | "error";
 
@@ -15,6 +17,10 @@ export default function QrLoginPage() {
   const [token, setToken] = useState<TokenResponse | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
+  const [username, setUsername] = useState<string | undefined>();
+  const [books, setBooks] = useState<Book[]>([]);
+  const [booksLoading, setBooksLoading] = useState(false);
+  const [booksError, setBooksError] = useState("");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -30,6 +36,9 @@ export default function QrLoginPage() {
     setPhase("loading");
     setErrorMsg("");
     setToken(null);
+    setUsername(undefined);
+    setBooks([]);
+    setBooksError("");
     try {
       const started = await startDeviceLogin();
       setDevice(started);
@@ -83,6 +92,7 @@ export default function QrLoginPage() {
       switch (result.status) {
         case "approved":
           setToken(result.token);
+          setUsername(decodePreferredUsername(result.token.access_token));
           setPhase("approved");
           return;
         case "expired":
@@ -109,6 +119,77 @@ export default function QrLoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, device]);
 
+  // Sau khi đăng nhập thành công, tải danh sách sách bằng access token vừa nhận
+  useEffect(() => {
+    if (phase !== "approved" || !token) return;
+    let cancelled = false;
+    setBooksLoading(true);
+    setBooksError("");
+    getBooks(token.access_token)
+      .then((data) => {
+        if (cancelled) return;
+        setBooks(data.books);
+        setUsername((prev) => prev ?? data.authenticatedAs);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setBooksError(e instanceof Error ? e.message : "Không tải được sách");
+      })
+      .finally(() => {
+        if (!cancelled) setBooksLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, token]);
+
+  if (phase === "approved" && token) {
+    return (
+      <>
+        <div className="navbar">
+          <div className="brand">📚 Bookstore</div>
+          <div>
+            <span className="who">Xin chào, {username ?? "..."}</span>
+            <button className="btn" onClick={begin}>Đăng nhập lại</button>
+          </div>
+        </div>
+        <main>
+          <div className="shop-header">
+            <div>
+              <h2>Danh sách sách</h2>
+              <p className="hint">Đã đăng nhập qua QR — dữ liệu từ bookstore-api-mobile.</p>
+            </div>
+          </div>
+
+          {booksError && <div className="alert">{booksError}</div>}
+
+          {booksLoading ? (
+            <p className="hint">Đang tải sách…</p>
+          ) : (
+            <div className="book-grid">
+              {books.map((b) => (
+                <div className="book-card" key={b.id}>
+                  <div className="book-cover">{b.cover}</div>
+                  <div>
+                    <div className="book-title">{b.title}</div>
+                    <div className="book-author">{b.author}</div>
+                  </div>
+                  <span className="book-genre">{b.genre}</span>
+                  <div className="book-buy">
+                    <span className="book-price">{b.price.toLocaleString("vi-VN")}₫</span>
+                  </div>
+                </div>
+              ))}
+              {books.length === 0 && (
+                <p className="hint">Chưa có sách nào.</p>
+              )}
+            </div>
+          )}
+        </main>
+      </>
+    );
+  }
+
   return (
     <div className="login-screen">
       <div className="login-box">
@@ -130,16 +211,6 @@ export default function QrLoginPage() {
               Hoặc nhập mã: <code>{device.user_code}</code>
             </p>
             <p className="hint">Mã hết hạn sau {secondsLeft}s</p>
-          </>
-        )}
-
-        {phase === "approved" && token && (
-          <>
-            <div className="alert" style={{ background: "#dcfce7", color: "#166534", borderColor: "#86efac" }}>
-              Đăng nhập thành công!
-            </div>
-            <p className="hint">Access token:</p>
-            <pre className="token">{token.access_token}</pre>
           </>
         )}
 

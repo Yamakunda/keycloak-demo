@@ -22,14 +22,14 @@ android {
         // Phải khớp với redirectUris của client "biometric-demo" trong Keycloak.
         manifestPlaceholders["appAuthRedirectScheme"] = "com.snp.bookstorebio"
 
-        // KEYCLOAK_BASE_URL bắt buộc là HTTPS thật (domain ngrok) chỉ cho LẦN ĐĂNG NHẬP ĐẦU
-        // (mở Custom Tab, username/password bình thường — client này không dùng WebAuthn).
+        // KEYCLOAK_BASE_URL: mặc định trỏ IP LAN của máy chạy Keycloak local (HTTP thường,
+        // cleartext traffic đã bật trong Manifest). Đổi qua ngrok HTTPS nếu test ngoài LAN.
         // Các lần sau app dùng vân tay cục bộ để giải mã refresh_token đã lưu, không mở
         // lại Custom Tab, nên vẫn cần Keycloak đạt được qua mạng chỉ để gọi token endpoint.
-        buildConfigField("String", "KEYCLOAK_BASE_URL", "\"${project.findProperty("kcBaseUrl") ?: "https://natant-kinesically-easter.ngrok-free.dev"}\"")
+        buildConfigField("String", "KEYCLOAK_BASE_URL", "\"${project.findProperty("kcBaseUrl") ?: "http://192.168.0.233:8080"}\"")
         buildConfigField("String", "KEYCLOAK_REALM", "\"test\"")
         buildConfigField("String", "KEYCLOAK_CLIENT_ID", "\"biometric-demo\"")
-        buildConfigField("String", "BOOKSTORE_API_BASE_URL", "\"${project.findProperty("apiBaseUrl") ?: "http://192.168.91.213:3043"}\"")
+        buildConfigField("String", "BOOKSTORE_API_BASE_URL", "\"${project.findProperty("apiBaseUrl") ?: "http://192.168.0.233:3043"}\"")
     }
 
     buildTypes {

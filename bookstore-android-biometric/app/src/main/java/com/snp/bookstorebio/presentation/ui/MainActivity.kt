@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -177,7 +178,16 @@ class MainActivity : FragmentActivity() {
      * nhập lại mật khẩu.
      */
     private fun openQrVerificationUrl(url: String) {
-        CustomTabsIntent.Builder().build().launchUrl(this, url.toUri())
+        // Chỉ định rõ package Custom Tabs — nếu không, Android có thể resolve khác trình
+        // duyệt so với lần AppAuth mở Custom Tab lúc đăng nhập đầu (khi máy có > 1 browser
+        // hỗ trợ Custom Tabs), khiến cookie SSO không được share, phải đăng nhập lại từ đầu.
+        val customTabsPackage = CustomTabsClient.getPackageName(this, null)
+        val builder = CustomTabsIntent.Builder()
+        val intent = builder.build()
+        if (customTabsPackage != null) {
+            intent.intent.setPackage(customTabsPackage)
+        }
+        intent.launchUrl(this, url.toUri())
     }
 
     override fun onResume() {
