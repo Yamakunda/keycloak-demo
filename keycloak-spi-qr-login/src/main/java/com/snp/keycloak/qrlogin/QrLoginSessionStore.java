@@ -21,7 +21,9 @@ final class QrLoginSessionStore {
     static final class Session {
         final String id;
         final long expiresAtMillis;
-        volatile String status = "pending"; // pending | approved
+        // pending -> scanned (app đã quét, chờ xác nhận biometric/mật khẩu trên điện thoại)
+        //         -> approved (app đã xác nhận xong, web được phép đăng nhập)
+        volatile String status = "pending";
         volatile String userId;
         volatile String username;
 
@@ -56,15 +58,34 @@ final class QrLoginSessionStore {
         return session;
     }
 
-    boolean approve(String id, String userId, String username, String ignoredAccessToken) {
+    // App vừa quét xong, chưa xác nhận biometric/mật khẩu — chỉ ghi nhận danh tính, KHÔNG
+    // cho phép web đăng nhập ở bước này. Cho phép gọi lại nhiều lần khi vẫn đang "pending"
+    // hoặc đã "scanned" trước đó (vd app quét lại), nhưng không cho quay lui từ "approved".
+    boolean scan(String id, String userId, String username) {
         Session session = get(id);
-        if (session == null || !"pending".equals(session.status)) {
+        if (session == null || "approved".equals(session.status)) {
             return false;
         }
         synchronized (session) {
-            if (!"pending".equals(session.status)) return false;
-            session.status = "approved";
+            if ("approved".equals(session.status)) return false;
+            session.status = "scanned";
             session.userId = userId;
+            session.username = username;
+        }
+        return true;
+    }
+
+    // App đã xác nhận xong (biometric/nhập lại mật khẩu) — chỉ hợp lệ khi đã qua bước "scanned"
+    // của CHÍNH userId đó, để tránh 1 access_token khác chiếm quyền approve phiên đã bị quét bởi
+    // người khác.
+    boolean approve(String id, String userId, String username) {
+        Session session = get(id);
+        if (session == null || !"scanned".equals(session.status) || !userId.equals(session.userId)) {
+            return false;
+        }
+        synchronized (session) {
+            if (!"scanned".equals(session.status) || !userId.equals(session.userId)) return false;
+            session.status = "approved";
             session.username = username;
         }
         return true;
@@ -72,6 +93,22 @@ final class QrLoginSessionStore {
 
     void remove(String id) {
         sessions.remove(id);
+    }
+
+    // App huỷ xác nhận (bấm "Từ chối" hoặc biometric thất bại) — trả phiên về "pending" để
+    // web vẫn hiện QR chờ quét lại, thay vì phải sinh phiên mới.
+    boolean cancel(String id, String userId) {
+        Session session = get(id);
+        if (session == null || !"scanned".equals(session.status) || !userId.equals(session.userId)) {
+            return false;
+        }
+        synchronized (session) {
+            if (!"scanned".equals(session.status) || !userId.equals(session.userId)) return false;
+            session.status = "pending";
+            session.userId = null;
+            session.username = null;
+        }
+        return true;
     }
 
     private void cleanupExpired() {

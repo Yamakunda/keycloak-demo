@@ -129,6 +129,30 @@ class MainActivity : FragmentActivity() {
         )
     }
 
+    /**
+     * Xác nhận "cho phép thiết bị kia đăng nhập" sau khi đã quét QR — chỉ xác thực danh tính
+     * ngay trên điện thoại (không cần CryptoObject/Keystore vì không giải mã dữ liệu nào ở
+     * đây, khác với promptSaveToVault/promptUnlockVault). Thất bại/huỷ => coi như từ chối.
+     */
+    private fun promptConfirmQrApprove() {
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    viewModel.onQrApproveConfirmed()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    viewModel.onQrConfirmationDismissed()
+                }
+            }
+        )
+        prompt.authenticate(
+            biometricPromptInfo("Xác nhận đăng nhập", "Xác thực vân tay để cho phép thiết bị kia đăng nhập")
+        )
+    }
+
     private fun biometricPromptInfo(title: String, subtitle: String) =
         BiometricPrompt.PromptInfo.Builder()
             .setTitle(title)
@@ -207,6 +231,8 @@ class MainActivity : FragmentActivity() {
                         onQrDetected = { rawValue -> viewModel.onQrCodeScanned(rawValue) },
                         onQrScanCancel = { viewModel.onQrScanDismissed() },
                         onQrApproveResultDismiss = { viewModel.onQrApproveResultDismissed() },
+                        onQrConfirmClick = { promptConfirmQrApprove() },
+                        onQrConfirmDismiss = { viewModel.onQrConfirmationDismissed() },
                     )
                 }
             }
@@ -226,6 +252,8 @@ fun BookstoreApp(
     onQrDetected: (String) -> Unit,
     onQrScanCancel: () -> Unit,
     onQrApproveResultDismiss: () -> Unit,
+    onQrConfirmClick: () -> Unit,
+    onQrConfirmDismiss: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
 
@@ -253,6 +281,8 @@ fun BookstoreApp(
                         onBiometricToggle = onBiometricToggle,
                         onScanQrClick = onScanQrClick,
                         onQrApproveResultDismiss = onQrApproveResultDismiss,
+                        onQrConfirmClick = onQrConfirmClick,
+                        onQrConfirmDismiss = onQrConfirmDismiss,
                     )
                 }
             }
@@ -317,9 +347,14 @@ private fun BooksScreen(
     onBiometricToggle: (Boolean) -> Unit,
     onScanQrClick: (QrLoginMode) -> Unit,
     onQrApproveResultDismiss: () -> Unit,
+    onQrConfirmClick: () -> Unit,
+    onQrConfirmDismiss: () -> Unit,
 ) {
     state.qrApproveResult?.let { result ->
         QrApproveResultDialog(result = result, onDismiss = onQrApproveResultDismiss)
+    }
+    if (state.pendingQrConfirmation != null) {
+        QrConfirmDialog(onConfirm = onQrConfirmClick, onDismiss = onQrConfirmDismiss)
     }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
@@ -381,6 +416,20 @@ private fun BooksScreen(
             }
         }
     }
+}
+
+@Composable
+private fun QrConfirmDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Cho phép đăng nhập?") },
+        text = { Text("Đã quét mã QR trên thiết bị khác. Xác thực vân tay/mật khẩu để cho phép thiết bị đó đăng nhập vào tài khoản của bạn.") },
+        confirmButton = { Button(onClick = onConfirm) { Text("Xác nhận") } },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Từ chối") } },
+    )
 }
 
 @Composable

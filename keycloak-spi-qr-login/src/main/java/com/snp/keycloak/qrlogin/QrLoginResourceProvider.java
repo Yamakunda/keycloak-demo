@@ -17,8 +17,13 @@ import java.util.Map;
 /**
  * Endpoint REST tùy biến cho luồng "quét QR đăng nhập chéo thiết bị":
  *   POST /realms/{realm}/qr-login/start    — web gọi để sinh session_id + QR payload
- *   POST /realms/{realm}/qr-login/approve  — app gọi (kèm Bearer access_token) để tự
- *                                             động approve, không cần mở trình duyệt
+ *   POST /realms/{realm}/qr-login/scan     — app gọi ngay sau khi quét (kèm Bearer
+ *                                             access_token) để ghi nhận danh tính, CHƯA cho
+ *                                             web đăng nhập — app phải hiển thị màn hình xác
+ *                                             nhận (biometric/nhập lại mật khẩu) trước
+ *   POST /realms/{realm}/qr-login/approve  — app gọi SAU KHI người dùng xác nhận trên điện
+ *                                             thoại, mới thật sự cho phép web đăng nhập
+ *   POST /realms/{realm}/qr-login/cancel   — app gọi khi người dùng từ chối/huỷ xác nhận
  *   POST /realms/{realm}/qr-login/poll     — web gọi lặp lại để chờ kết quả
  *
  * Đây là bản port sang chạy ngay trong Keycloak của route Node.js
@@ -50,28 +55,22 @@ public class QrLoginResourceProvider implements RealmResourceProvider {
         )).build();
     }
 
+    // App gọi ngay sau khi camera đọc được mã QR — chỉ ghi nhận "ai đang muốn approve",
+    // KHÔNG cấp quyền đăng nhập cho web ở bước này. App phải tự hiển thị màn hình xác nhận
+    // (biometric hoặc nhập lại mật khẩu) trước khi cho phép gọi /approve.
     @POST
-    @Path("approve")
+    @Path("scan")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public Response approve(Map<String, Object> body, @Context HttpHeaders headers) {
-        String authHeader = headers.getHeaderString("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return errorResponse(Response.Status.UNAUTHORIZED, "unauthorized", "Missing Authorization: Bearer <token>");
+    public Response scan(Map<String, Object> body, @Context HttpHeaders headers) {
+        TokenIntrospection.Result introspected = introspectBearer(headers);
+        if (introspected == null) {
+            return errorResponse(Response.Status.UNAUTHORIZED, "unauthorized", "Token không hợp lệ hoặc thiếu Authorization: Bearer <token>");
         }
-        String accessToken = authHeader.substring("Bearer ".length());
 
         String sessionId = (String) body.get("session_id");
         if (sessionId == null || sessionId.isBlank()) {
             return errorResponse(Response.Status.BAD_REQUEST, "invalid_request", "Thiếu session_id");
-        }
-
-        TokenIntrospection.Result introspected;
-        try {
-            introspected = TokenIntrospection.verify(session, accessToken);
-        } catch (Exception e) {
-            logger.warnf("QR approve: token verify failed: %s", e.getMessage());
-            return errorResponse(Response.Status.UNAUTHORIZED, "unauthorized", "Token không hợp lệ: " + e.getMessage());
         }
 
         QrLoginSessionStore store = QrLoginSessionStore.getInstance();
@@ -79,16 +78,85 @@ public class QrLoginResourceProvider implements RealmResourceProvider {
         if (qrSession == null) {
             return errorResponse(Response.Status.NOT_FOUND, "not_found", "Phiên QR không tồn tại hoặc đã hết hạn");
         }
-        if (!"pending".equals(qrSession.status)) {
-            return errorResponse(Response.Status.CONFLICT, "already_used", "Phiên QR đã được xử lý");
+
+        boolean scanned = store.scan(sessionId, introspected.userId(), introspected.username());
+        if (!scanned) {
+            return errorResponse(Response.Status.CONFLICT, "already_used", "Phiên QR đã được xác nhận hoặc đã xử lý");
         }
 
-        boolean approved = store.approve(sessionId, introspected.userId(), introspected.username(), accessToken);
+        return Response.ok(Map.of("status", "scanned", "username", introspected.username())).build();
+    }
+
+    // App gọi SAU KHI người dùng xác nhận thành công bằng biometric/nhập lại mật khẩu trên
+    // chính điện thoại — đây là bước thật sự cấp quyền cho web đăng nhập.
+    @POST
+    @Path("approve")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response approve(Map<String, Object> body, @Context HttpHeaders headers) {
+        TokenIntrospection.Result introspected = introspectBearer(headers);
+        if (introspected == null) {
+            return errorResponse(Response.Status.UNAUTHORIZED, "unauthorized", "Token không hợp lệ hoặc thiếu Authorization: Bearer <token>");
+        }
+
+        String sessionId = (String) body.get("session_id");
+        if (sessionId == null || sessionId.isBlank()) {
+            return errorResponse(Response.Status.BAD_REQUEST, "invalid_request", "Thiếu session_id");
+        }
+
+        QrLoginSessionStore store = QrLoginSessionStore.getInstance();
+        QrLoginSessionStore.Session qrSession = store.get(sessionId);
+        if (qrSession == null) {
+            return errorResponse(Response.Status.NOT_FOUND, "not_found", "Phiên QR không tồn tại hoặc đã hết hạn");
+        }
+        if (!"scanned".equals(qrSession.status)) {
+            return errorResponse(Response.Status.CONFLICT, "not_scanned", "Phiên QR chưa được quét hoặc đã được xử lý — cần gọi /scan trước");
+        }
+
+        boolean approved = store.approve(sessionId, introspected.userId(), introspected.username());
         if (!approved) {
-            return errorResponse(Response.Status.CONFLICT, "already_used", "Phiên QR đã được xử lý");
+            return errorResponse(Response.Status.CONFLICT, "already_used", "Phiên QR đã được xử lý hoặc thuộc về người dùng khác");
         }
 
         return Response.ok(Map.of("status", "approved")).build();
+    }
+
+    // App gọi khi người dùng bấm "Từ chối" hoặc biometric thất bại — trả phiên QR về trạng
+    // thái chờ quét lại, thay vì để web bị treo mãi ở "scanned".
+    @POST
+    @Path("cancel")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response cancel(Map<String, Object> body, @Context HttpHeaders headers) {
+        TokenIntrospection.Result introspected = introspectBearer(headers);
+        if (introspected == null) {
+            return errorResponse(Response.Status.UNAUTHORIZED, "unauthorized", "Token không hợp lệ hoặc thiếu Authorization: Bearer <token>");
+        }
+
+        String sessionId = (String) body.get("session_id");
+        if (sessionId == null || sessionId.isBlank()) {
+            return errorResponse(Response.Status.BAD_REQUEST, "invalid_request", "Thiếu session_id");
+        }
+
+        boolean cancelled = QrLoginSessionStore.getInstance().cancel(sessionId, introspected.userId());
+        if (!cancelled) {
+            return errorResponse(Response.Status.CONFLICT, "invalid_state", "Phiên QR không ở trạng thái chờ xác nhận của bạn");
+        }
+        return Response.ok(Map.of("status", "pending")).build();
+    }
+
+    private TokenIntrospection.Result introspectBearer(HttpHeaders headers) {
+        String authHeader = headers.getHeaderString("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return null;
+        }
+        String accessToken = authHeader.substring("Bearer ".length());
+        try {
+            return TokenIntrospection.verify(session, accessToken);
+        } catch (Exception e) {
+            logger.warnf("QR: token verify failed: %s", e.getMessage());
+            return null;
+        }
     }
 
     // POST /qr-login/check — trang login (qr-login.ftl) gọi lặp lại chỉ để biết đã approved

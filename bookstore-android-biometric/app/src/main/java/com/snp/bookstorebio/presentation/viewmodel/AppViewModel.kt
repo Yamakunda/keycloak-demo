@@ -24,6 +24,14 @@ sealed interface QrApproveResult {
     data class Failed(val message: String) : QrApproveResult
 }
 
+// Chỉ phát sinh cho KEYCLOAK_SPI: đã gọi /qr-login/scan xong (danh tính đã ghi nhận) nhưng
+// CHƯA gọi /qr-login/approve — chờ người dùng xác nhận bằng biometric/nhập lại mật khẩu
+// trên chính điện thoại trước khi thật sự cấp quyền cho thiết bị kia.
+data class PendingQrConfirmation(
+    val apiUrl: String,
+    val sessionId: String,
+)
+
 sealed interface UiState {
     data class LoggedOut(val savedUsername: String? = null) : UiState
     data object LoggingIn : UiState
@@ -38,6 +46,7 @@ sealed interface UiState {
         // nào (web thường hay trang login Keycloak) để gọi đúng endpoint approve.
         val scanningQrMode: QrLoginMode? = null,
         val qrApproveResult: QrApproveResult? = null,
+        val pendingQrConfirmation: PendingQrConfirmation? = null,
     ) : UiState
 }
 
@@ -122,14 +131,17 @@ class AppViewModel @Inject constructor(
     /**
      * Cả 2 nguồn QR (web thường qua bookstore-fe-qr, hoặc trang login Keycloak qua SPI) đều
      * chứa cùng định dạng JSON {"apiUrl": "...", "sessionId": "..."} — chỉ khác path approve
-     * cuối cùng, chọn theo mode người dùng đã bấm nút trước khi quét. App tự gọi endpoint
-     * tương ứng bằng access_token nó đang có (KHÔNG mở Custom Tabs) để approve phiên — loại
-     * bỏ hẳn bước phải đăng nhập/xác nhận lại trên trình duyệt.
+     * cuối cùng, chọn theo mode người dùng đã bấm nút trước khi quét.
+     *
+     * - LEGACY: approve ngay 1 bước như trước (bookstore-api-qr không có bước xác nhận riêng).
+     * - KEYCLOAK_SPI: chỉ gọi /qr-login/scan để ghi nhận danh tính, rồi chuyển sang màn hình
+     *   chờ xác nhận (pendingQrConfirmation) — CHƯA cấp quyền cho thiết bị kia. Người dùng
+     *   phải xác nhận bằng biometric/nhập lại mật khẩu (xem MainActivity.promptConfirmQrApprove)
+     *   thì [onQrApproveConfirmed] mới thật sự gọi /qr-login/approve.
      */
     fun onQrCodeScanned(rawValue: String) {
         val current = (_uiState.value as? UiState.LoggedIn) ?: return
         val mode = current.scanningQrMode ?: return
-        _uiState.value = current.copy(scanningQrMode = null, qrApproveResult = QrApproveResult.Approving)
 
         val accessToken = authState?.accessToken
         if (accessToken == null) {
@@ -148,18 +160,82 @@ class AppViewModel @Inject constructor(
         }.getOrNull()
 
         if (parsed == null) {
-            _uiState.value = (_uiState.value as UiState.LoggedIn).copy(
+            _uiState.value = current.copy(
+                scanningQrMode = null,
                 qrApproveResult = QrApproveResult.Failed("Mã QR không hợp lệ."),
             )
             return
         }
         val (apiUrl, sessionId) = parsed
 
+        if (mode == QrLoginMode.LEGACY) {
+            _uiState.value = current.copy(scanningQrMode = null, qrApproveResult = QrApproveResult.Approving)
+            viewModelScope.launch {
+                val result = qrLoginApi.approve(
+                    mode = mode,
+                    apiUrl = apiUrl,
+                    sessionId = sessionId,
+                    accessToken = accessToken,
+                    refreshToken = authState?.refreshToken,
+                    expiresIn = null,
+                    scope = authState?.scope,
+                )
+                val latest = (_uiState.value as? UiState.LoggedIn) ?: return@launch
+                _uiState.value = result.fold(
+                    onSuccess = { latest.copy(qrApproveResult = QrApproveResult.Success) },
+                    onFailure = { e -> latest.copy(qrApproveResult = QrApproveResult.Failed(e.message ?: "Lỗi không xác định")) },
+                )
+            }
+            return
+        }
+
+        // KEYCLOAK_SPI: gọi /scan trước, chưa cấp quyền — chờ xác nhận biometric.
+        _uiState.value = current.copy(scanningQrMode = null, qrApproveResult = QrApproveResult.Approving)
+        viewModelScope.launch {
+            val result = qrLoginApi.scan(apiUrl = apiUrl, sessionId = sessionId, accessToken = accessToken)
+            val latest = (_uiState.value as? UiState.LoggedIn) ?: return@launch
+            _uiState.value = result.fold(
+                onSuccess = {
+                    latest.copy(
+                        qrApproveResult = null,
+                        pendingQrConfirmation = PendingQrConfirmation(apiUrl = apiUrl, sessionId = sessionId),
+                    )
+                },
+                onFailure = { e -> latest.copy(qrApproveResult = QrApproveResult.Failed(e.message ?: "Lỗi không xác định")) },
+            )
+        }
+    }
+
+    fun onQrConfirmationDismissed() {
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        val pending = current.pendingQrConfirmation ?: return
+        _uiState.value = current.copy(pendingQrConfirmation = null)
+
+        val accessToken = authState?.accessToken ?: return
+        viewModelScope.launch {
+            qrLoginApi.cancel(apiUrl = pending.apiUrl, sessionId = pending.sessionId, accessToken = accessToken)
+        }
+    }
+
+    /** Gọi SAU KHI BiometricPrompt xác nhận thành công — đây mới là bước cấp quyền thật sự. */
+    fun onQrApproveConfirmed() {
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        val pending = current.pendingQrConfirmation ?: return
+        val accessToken = authState?.accessToken
+        if (accessToken == null) {
+            _uiState.value = current.copy(
+                pendingQrConfirmation = null,
+                qrApproveResult = QrApproveResult.Failed("Phiên đăng nhập đã hết hạn, hãy đăng nhập lại."),
+            )
+            return
+        }
+
+        _uiState.value = current.copy(pendingQrConfirmation = null, qrApproveResult = QrApproveResult.Approving)
         viewModelScope.launch {
             val result = qrLoginApi.approve(
-                mode = mode,
-                apiUrl = apiUrl,
-                sessionId = sessionId,
+                mode = QrLoginMode.KEYCLOAK_SPI,
+                apiUrl = pending.apiUrl,
+                sessionId = pending.sessionId,
                 accessToken = accessToken,
                 refreshToken = authState?.refreshToken,
                 expiresIn = null,

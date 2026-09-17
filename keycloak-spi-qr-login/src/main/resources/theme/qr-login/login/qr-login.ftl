@@ -55,6 +55,10 @@
                                 clearInterval(timer);
                                 statusEl.textContent = "Đã xác nhận! Đang đăng nhập…";
                                 document.getElementById("kc-qr-form").submit();
+                            } else if (data.status === "scanned") {
+                                statusEl.textContent = "Đã quét — hãy xác nhận trên điện thoại";
+                            } else {
+                                statusEl.textContent = "Đang chờ quét mã…";
                             }
                         })
                         .catch(function () {});
