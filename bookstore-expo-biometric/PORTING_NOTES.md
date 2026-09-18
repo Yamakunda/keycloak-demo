@@ -184,14 +184,32 @@ App.tsx
 app.config.ts
 ```
 
+## Đã test trên thiết bị thật (iPhone)
+
+- **Môi trường build:** máy Mac cần Xcode đầy đủ (không chỉ Command Line Tools) — macOS phải ≥26.6 để cài được Xcode từ App Store. Cài thêm `watchman` (khuyến nghị chính thức cho Metro). Java cho Android build: máy có sẵn Java 26 (không tương thích AGP hiện tại, lỗi `jlink`/`androidJdkImage`) — đã cài riêng Java 17 qua Homebrew (`brew install openjdk@17`) và set `JAVA_HOME`/`ANDROID_HOME` trong `~/.zshrc`, không đổi Java hệ thống mặc định.
+- **Lần build đầu lên thiết bị thật cần ký app thủ công qua Xcode:** `npx expo run:ios --device` báo lỗi `No code signing certificates are available to use` — mở `ios/*.xcworkspace` bằng Xcode, vào Signing & Capabilities → chọn Team (Apple ID cá nhân, free provisioning đủ dùng) → Xcode tự tạo certificate. Sau lần đó CLI chạy bình thường.
+- **`npx expo run:ios --device` tự khởi động Metro** — nếu build qua Xcode (nút Run ▶️) trực tiếp thay vì qua CLI, Metro KHÔNG tự chạy kèm, app cài xong sẽ báo lỗi đỏ "Could not connect to development server". Phải tự chạy `npx expo start --dev-client` riêng.
+
+### Bug quan trọng đã tìm và sửa: dialog QR không hiện trên iOS sau khi quét
+
+**Triệu chứng:** luồng KEYCLOAK_SPI — quét QR xong (Keycloak xác nhận đã quét), nhưng dialog "Cho phép đăng nhập?" trên app không hiện. Bấm lại nút "Quét QR" tưởng chưa quét được → mở lại camera đè lên, gây hiện tượng tưởng như "đứng màn hình".
+
+**Nguyên nhân gốc (xác nhận qua log `console.log` thêm tạm thời rồi xóa):**
+1. State/reducer hoàn toàn đúng — `pendingQrConfirmation` được set đúng ngay sau khi `/qr-login/scan` thành công.
+2. Nhưng trên **iOS**, `expo-camera`'s `CameraView` dùng native full-screen presentation (tương tự modal). Khi `scanningQrMode` chuyển về `null`, React unmount `QrScannerScreen` đúng, nhưng UIKit chưa hoàn tất animation dismiss camera. Nếu RN `Modal` (dùng cho `QrConfirmDialog`/`QrApproveResultDialog`) present ngay lập tức lúc đó, UIKit **âm thầm từ chối** present ("Attempt to present ... while a presentation is in progress") — lỗi này chỉ log ở tầng native (Xcode console), **không hề xuất hiện trong JS console/Metro log**, nên trông như dialog "không hiện" dù state đúng 100%.
+3. Có bug phụ liên quan: gọi `dispatch`/side-effect trực tiếp trong `setState` updater hoặc trong native callback `onBarcodeScanned` khi nó bắn ngay trong render pass đầu tiên gây lỗi React thật: `Cannot update a component (AppProvider) while rendering a different component (QrScannerScreen)` — đã sửa bằng cách tách `onQrDetected` (side-effect gọi dispatch ở component cha) ra `useEffect` riêng, chỉ trigger sau khi `CameraView`'s local state đổi, không gọi trực tiếp trong callback native.
+
+**Cách sửa (đã áp dụng trong `BooksScreen.tsx` và `QrScannerScreen.tsx`):**
+- `QrScannerScreen.tsx`: thêm prop `active={detectedValue === null}` cho `CameraView` (dừng camera session ngay khi phát hiện QR, không chờ unmount — `active` là prop chính thức của `expo-camera` cho đúng mục đích này, chỉ có trên iOS). Gọi `onQrDetected` trong `useEffect` theo dõi state nội bộ, không gọi trực tiếp trong `onBarcodeScanned`.
+- `BooksScreen.tsx`: thêm state `dialogsReady` với `setTimeout(400ms)` sau khi `scanningQrMode` về `null`, chỉ cho phép `QrApproveResultDialog`/`QrConfirmDialog` mount sau khoảng trễ đó — đảm bảo camera đã dismiss animation xong trước khi Modal cố present. Đồng thời thêm guard ở `onScanQrClick`/`onQrDetected`: chặn mở lại camera hoặc xử lý QR mới khi đã có `pendingQrConfirmation`/`qrApproveResult` đang chờ xử lý (tránh việc người dùng bấm lại nút quét khi tưởng chưa quét được, ghi đè state đang chờ).
+
+**Đã verify:** quét QR SPI → dialog "Cho phép đăng nhập?" hiện đúng → bấm Xác nhận → Face ID → dialog "Đang xác nhận…" → "Thành công" — chạy trơn tru 2 lần liên tiếp trên iPhone thật.
+
+**Lưu ý cho Android:** bug này là **đặc thù iOS** (do cách UIKit xử lý presentation chồng lấn). Trên Android, camera preview không dùng cơ chế modal-like tương tự nên nhiều khả năng không gặp vấn đề này — nhưng delay 400ms/guard đã thêm không gây hại gì nếu Android không cần, nên giữ nguyên logic chung cho cả 2 platform thay vì tách riêng.
+
 ## Việc còn lại trước khi coi là xong
 
-Toàn bộ code đã viết xong và verify được bằng static tooling (`tsc`, `expo export`, `expo prebuild`) trong môi trường này — **chưa test được trên thiết bị/emulator thật** vì không có máy Android/iOS kết nối ở đây. Trước khi coi là "xong", cần tự chạy và xác nhận trên thiết bị thật:
-
-1. `npm run android` (hoặc `npm run ios`) để build Dev Client lần đầu — cần Android Studio/Xcode cài sẵn.
-2. **Smoke test tổng thể** (đúng theo plan gốc): cài mới → login → bật vân tay → force-quit → mở lại → unlock vân tay → quét QR LEGACY → quét QR KEYCLOAK_SPI → approve → logout → mở lại → xác nhận vẫn còn nút "unlock bằng vân tay cho {username}" → tắt vân tay → xác nhận vault bị xóa.
-3. Các điểm khác biệt platform cần chú ý khi test (đã note ở Phase 2/3):
-   - `saveToken` có tự bật prompt sinh trắc học trên Android hay không (do `STORAGE_TYPE.AES_GCM` yêu cầu xác thực cả 2 chiều).
-   - Hành vi "vault invalidated" khi đổi vân tay đăng ký trên máy.
-   - Cookie SSO Android (dùng chung Chrome) vs iOS (không đảm bảo) ở luồng LEGACY.
-4. Redirect URI Keycloak — đã đăng ký sẵn (`bookstorebioexpo://oauth2redirect`), không cần làm lại trừ khi đổi `scheme` trong `app.config.ts`.
+1. **Luồng LEGACY (Device Grant) trên iOS** — chưa test riêng trên thiết bị thật. Cần verify hành vi cookie SSO Safari (`expo-web-browser.openBrowserAsync`) không đảm bảo dùng chung session như Android Custom Tabs (đã note ở Phase 3) — kỳ vọng có thể phải đăng nhập lại thủ công trên trang xác nhận, không phải bug.
+2. **Biometric vault (save/unlock) trên iOS** — chưa xác nhận riêng hành vi Face ID gate cả write/read hay chỉ read (khác Android nơi `STORAGE_TYPE.AES_GCM` yêu cầu xác thực cả 2 chiều theo doc thư viện).
+3. **Test trên Android thật** — toàn bộ smoke test ở trên mới làm trên iPhone, chưa có thiết bị Android thật để đối chiếu.
+4. Redirect URI Keycloak cho app Expo (`bookstorebioexpo://oauth2redirect`) đã đăng ký sẵn, không cần làm lại trừ khi đổi `scheme` trong `app.config.ts`.

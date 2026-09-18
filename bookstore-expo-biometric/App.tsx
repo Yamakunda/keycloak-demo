@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
-import { SafeAreaView, StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { BooksScreen } from './src/screens/BooksScreen';
 import { LoadingScreen } from './src/screens/LoadingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
@@ -22,10 +22,10 @@ function Root() {
 export default function App() {
   return (
     <AppProvider>
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <Root />
         <StatusBar style="auto" />
-      </SafeAreaView>
+      </View>
     </AppProvider>
   );
 }

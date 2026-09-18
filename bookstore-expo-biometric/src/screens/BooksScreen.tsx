@@ -1,5 +1,5 @@
 import * as WebBrowser from 'expo-web-browser';
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Button, FlatList, StyleSheet, Switch, Text, View } from 'react-native';
 import { logout } from '../auth/authManager';
 import { checkBiometricEnrollment } from '../auth/biometricEnrollment';
@@ -22,6 +22,21 @@ export function BooksScreen({ username, error }: { username: string; error: stri
   const pendingQrConfirmation = state.kind === 'loggedIn' ? state.pendingQrConfirmation : null;
   const books = state.kind === 'loggedIn' ? state.books : [];
   const loadingBooks = state.kind === 'loggedIn' ? state.loadingBooks : false;
+
+  // Trên iOS, CameraView (native full-screen presentation) chưa dismiss animation xong
+  // ngay khi scanningQrMode chuyển về null — Modal present ngay lập tức lúc đó bị UIKit
+  // âm thầm từ chối ("Attempt to present ... while a presentation is in progress", chỉ
+  // log native, không lên JS console) nên dialog QR không bao giờ hiện dù state đúng.
+  // Trễ nhẹ để camera chắc chắn đã đóng hẳn trước khi cho phép Modal mount.
+  const [dialogsReady, setDialogsReady] = useState(scanningQrMode === null);
+  useEffect(() => {
+    if (scanningQrMode !== null) {
+      setDialogsReady(false);
+      return;
+    }
+    const timer = setTimeout(() => setDialogsReady(true), 400);
+    return () => clearTimeout(timer);
+  }, [scanningQrMode]);
 
   const onRefresh = useCallback(async () => {
     const accessToken = tokensRef.current?.accessToken;
@@ -90,10 +105,22 @@ export function BooksScreen({ username, error }: { username: string; error: stri
   };
 
   const onScanQrClick = (mode: QrLoginMode) => {
+    // Chặn mở lại camera khi đang có dialog QR khác chờ xử lý — nếu không, scanningQrMode
+    // chuyển khác null khiến BooksScreen return sớm ở nhánh camera (dòng dưới), làm biến
+    // mất toàn bộ dialog (qrApproveResult/pendingQrConfirmation) khỏi cây render dù state
+    // vẫn còn nguyên — trông như app "đứng màn hình".
+    if (pendingQrConfirmation || qrApproveResult) return;
     dispatch({ type: 'scanQrClicked', mode });
   };
 
   const onQrDetected = async (rawValue: string) => {
+    // Camera native (AVCaptureSession trên iOS) có độ trễ khi dừng sau khi unmount —
+    // onBarcodeScanned có thể bắn thêm 1-2 lần với cùng QR trước khi CameraView thực sự
+    // biến mất khỏi cây render. Chặn ở đây bằng state (không chỉ ref cục bộ trong
+    // QrScannerScreen) để không tạo đè pendingQrConfirmation/qrApproveResult mới lên
+    // dialog đang chờ xử lý — nếu không dialog sẽ liên tục bị reset trông như "biến mất".
+    if (pendingQrConfirmation || qrApproveResult) return;
+
     if (scanningQrMode === 'LEGACY') {
       if (!rawValue.startsWith('http://') && !rawValue.startsWith('https://')) {
         dispatch({ type: 'legacyQrInvalid' });
@@ -169,13 +196,13 @@ export function BooksScreen({ username, error }: { username: string; error: stri
 
   return (
     <View style={styles.container}>
-      {qrApproveResult && (
+      {dialogsReady && qrApproveResult && (
         <QrApproveResultDialog
           result={qrApproveResult}
           onDismiss={() => dispatch({ type: 'qrApproveResultDismissed' })}
         />
       )}
-      {pendingQrConfirmation && (
+      {dialogsReady && pendingQrConfirmation && (
         <QrConfirmDialog onConfirm={onQrConfirmClick} onDismiss={onQrConfirmDismiss} />
       )}
 

@@ -1,5 +1,5 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 
 /**
@@ -16,9 +16,15 @@ export function QrScannerScreen({
 }) {
   const [permission, requestPermission] = useCameraPermissions();
 
-  // Plain ref (không phải React state) vì onBarcodeScanned có thể bắn nhiều lần trước khi
-  // component cha unmount camera — tương đương booleanArrayOf(false) trong Kotlin, chỉ cần
-  // chặn xử lý > 1 lần, không cần re-render.
+  // React state (không phải plain ref) vì phải trigger re-render để truyền active={false}
+  // xuống CameraView — trên iOS, AVCaptureSession có độ trễ khi dừng sau khi component cha
+  // unmount, nên onBarcodeScanned có thể bắn thêm lần nữa với cùng QR trước khi camera
+  // thực sự biến mất, tạo ra 2 lần xử lý cho 1 lần quét. Đặt active=false ngay khi phát
+  // hiện QR đầu tiên để dừng camera session lập tức, không chỉ dựa vào unmount.
+  const [detectedValue, setDetectedValue] = useState<string | null>(null);
+  // onBarcodeScanned có thể bắn nhiều lần trong CÙNG một tick trước khi setDetectedValue
+  // kịp re-render (native callback, không phải React event) — ref chặn ngay lập tức,
+  // trong khi state chỉ dùng để điều khiển active prop.
   const alreadyDetected = useRef(false);
 
   useEffect(() => {
@@ -28,14 +34,21 @@ export function QrScannerScreen({
     }
   }, [permission, requestPermission]);
 
-  const handleBarcodeScanned = useCallback(
-    ({ data }: { data: string }) => {
-      if (alreadyDetected.current) return;
-      alreadyDetected.current = true;
-      onQrDetected(data);
-    },
-    [onQrDetected],
-  );
+  // Gọi onQrDetected (side-effect chạm tới state của component cha) trong effect, KHÔNG
+  // phải trực tiếp trong onBarcodeScanned/setState updater — onBarcodeScanned có thể bắn
+  // ngay trong lúc React đang render CameraView lần đầu, và dispatch thẳng ở đó vi phạm
+  // quy tắc React ("Cannot update a component while rendering a different component"),
+  // khiến state bị áp dụng sai thứ tự (chính là nguyên nhân dialog "nhấp nháy" trước đó).
+  useEffect(() => {
+    if (detectedValue !== null) onQrDetected(detectedValue);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detectedValue]);
+
+  const handleBarcodeScanned = useCallback(({ data }: { data: string }) => {
+    if (alreadyDetected.current) return;
+    alreadyDetected.current = true;
+    setDetectedValue(data);
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -44,6 +57,7 @@ export function QrScannerScreen({
           <CameraView
             style={StyleSheet.absoluteFill}
             facing="back"
+            active={detectedValue === null}
             barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
             onBarcodeScanned={handleBarcodeScanned}
           />
