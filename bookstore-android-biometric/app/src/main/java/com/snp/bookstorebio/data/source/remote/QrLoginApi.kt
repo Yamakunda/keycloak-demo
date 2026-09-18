@@ -11,18 +11,18 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 
 /**
- * Có 2 nguồn QR song song, khác endpoint và khác số bước approve:
- *  - LEGACY: QR vẽ bởi bookstore-fe-qr (web thường ngoài Keycloak) → bookstore-api-qr,
- *    route "/qr/approve" (Node.js, giữ client_secret của qr-login-confidential) — 1 bước,
- *    approve ngay khi quét xong, KHÔNG có bước xác nhận thêm trên điện thoại.
+ * Có 2 nguồn QR song song, khác hẳn cơ chế:
+ *  - LEGACY: QR vẽ bởi bookstore-fe-qr, encode thẳng "verification_uri_complete" của OAuth
+ *    2.0 Device Authorization Grant (RFC 8628) — app KHÔNG gọi API nào ở đây, chỉ mở URL đó
+ *    bằng Custom Tabs (xem MainActivity), người dùng tự bấm "Cho phép" trên trang xác nhận
+ *    thật của Keycloak. Xem AppViewModel.onQrCodeScanned.
  *  - KEYCLOAK_SPI: QR vẽ bởi qr-login.ftl (ngay trên trang login mặc định của Keycloak,
- *    qua "Try another way") → chạy thẳng trong Keycloak (keycloak-spi-qr-login) — 2 bước:
- *    "/qr-login/scan" ngay khi quét (chỉ ghi nhận, CHƯA cấp quyền), rồi "/qr-login/approve"
- *    sau khi người dùng xác nhận bằng biometric/nhập lại mật khẩu trên chính điện thoại.
- *    Có thêm "/qr-login/cancel" nếu người dùng từ chối xác nhận.
- * Cả hai cùng định dạng JSON {"apiUrl":..., "sessionId":...} nên người dùng phải tự chọn
- * đúng nút quét tương ứng với UI đang hiển thị trên thiết bị kia — apiUrl chỉ khác base URL
- * (bookstore-api-qr vs Keycloak realm) nên không tự suy ra chắc chắn 100% được.
+ *    qua "Try another way") → chạy thẳng trong Keycloak (keycloak-spi-qr-login), JSON
+ *    {"apiUrl":..., "sessionId":...} — 2 bước: "/qr-login/scan" ngay khi quét (chỉ ghi nhận,
+ *    CHƯA cấp quyền), rồi "/qr-login/approve" sau khi người dùng xác nhận bằng biometric/nhập
+ *    lại mật khẩu trên chính điện thoại. Có thêm "/qr-login/cancel" nếu từ chối xác nhận.
+ * Vì QR của 2 luồng có định dạng khác nhau hẳn (URL thuần vs JSON), người dùng phải tự chọn
+ * đúng nút quét tương ứng với UI đang hiển thị trên thiết bị kia.
  */
 enum class QrLoginMode {
     LEGACY,
@@ -34,34 +34,12 @@ class QrLoginApi {
     private val json = Json { ignoreUnknownKeys = true }
     private val jsonMediaType = "application/json".toMediaType()
 
-    // Chỉ KEYCLOAK_SPI có bước xác nhận riêng (scan trước, approve sau) — LEGACY dùng thẳng
-    // [approve] 1 bước như cũ vì bookstore-api-qr (Node.js) không có route "/qr/scan".
+    // Chỉ KEYCLOAK_SPI dùng — LEGACY không gọi API nào của app này (xem doc comment ở trên).
     suspend fun scan(apiUrl: String, sessionId: String, accessToken: String): Result<Unit> =
         postSessionAction("$apiUrl/qr-login/scan", QrApproveRequest(session_id = sessionId, access_token = accessToken))
 
-    // LEGACY: bookstore-api-qr forward access_token/refresh_token/expires_in/scope thẳng cho
-    // web dùng luôn (nó không tự issue token) nên cần đủ các field này trong body.
-    // KEYCLOAK_SPI: chỉ cần session_id + access_token, các field còn lại bị bỏ qua ở server.
-    suspend fun approve(
-        mode: QrLoginMode,
-        apiUrl: String,
-        sessionId: String,
-        accessToken: String,
-        refreshToken: String?,
-        expiresIn: Int?,
-        scope: String?,
-    ): Result<Unit> {
-        val path = if (mode == QrLoginMode.LEGACY) "/qr/approve" else "/qr-login/approve"
-        val request = QrApproveRequest(
-            session_id = sessionId,
-            access_token = accessToken,
-            refresh_token = refreshToken,
-            expires_in = expiresIn,
-            token_type = "Bearer",
-            scope = scope,
-        )
-        return postSessionAction("$apiUrl$path", request)
-    }
+    suspend fun approve(apiUrl: String, sessionId: String, accessToken: String): Result<Unit> =
+        postSessionAction("$apiUrl/qr-login/approve", QrApproveRequest(session_id = sessionId, access_token = accessToken))
 
     // Người dùng bấm "Từ chối" hoặc biometric thất bại — trả phiên QR về trạng thái chờ
     // quét lại thay vì để thiết bị kia bị treo mãi ở "đã quét, chờ xác nhận".

@@ -1,21 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import {
-  QrStartResponse,
+  DeviceStartResponse,
   TokenResponse,
-  pollQrSession,
-  startQrSession,
-} from "../services/qrSessionService";
-import { API_URL } from "../config/api";
+  pollDeviceToken,
+  startDeviceFlow,
+} from "../services/deviceService";
 import { Book, getBooks } from "../services/bookService";
 
-type Phase = "loading" | "ready" | "approved" | "expired" | "error";
-
-const POLL_INTERVAL_MS = 2000;
+type Phase = "loading" | "ready" | "approved" | "expired" | "denied" | "error";
 
 export default function QrLoginPage() {
   const [phase, setPhase] = useState<Phase>("loading");
-  const [session, setSession] = useState<QrStartResponse | null>(null);
+  const [session, setSession] = useState<DeviceStartResponse | null>(null);
   const [token, setToken] = useState<TokenResponse | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
@@ -42,7 +39,7 @@ export default function QrLoginPage() {
     setBooks([]);
     setBooksError("");
     try {
-      const started = await startQrSession();
+      const started = await startDeviceFlow();
       setSession(started);
       setSecondsLeft(started.expires_in);
       setPhase("ready");
@@ -58,11 +55,11 @@ export default function QrLoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Vẽ QR mỗi khi có session mới — encode JSON để app biết gọi API nào + session_id nào
+  // Vẽ QR chính verification_uri_complete Keycloak trả về — điện thoại quét QR chỉ mở URL
+  // này (Custom Tabs), không có payload tự chế nào ở đây như thiết kế "tự-approve" cũ.
   useEffect(() => {
     if (session && canvasRef.current) {
-      const payload = JSON.stringify({ apiUrl: API_URL, sessionId: session.session_id });
-      QRCode.toCanvas(canvasRef.current, payload, {
+      QRCode.toCanvas(canvasRef.current, session.verification_uri_complete, {
         width: 240,
         margin: 1,
       });
@@ -81,34 +78,40 @@ export default function QrLoginPage() {
     return () => clearTimeout(t);
   }, [phase, secondsLeft]);
 
-  // Polling trạng thái session — app tự approve bằng access_token nó có sẵn, không cần
-  // mở trình duyệt để bấm xác nhận như Device Authorization Grant chuẩn.
+  // Poll token endpoint theo đúng "interval" Keycloak yêu cầu — chờ người dùng bấm "Cho
+  // phép" trên trang xác nhận thật của Keycloak, không tự động approve như thiết kế cũ.
   useEffect(() => {
     if (phase !== "ready" || !session) return;
 
     let cancelled = false;
+    let intervalMs = session.interval * 1000;
 
     const tick = async () => {
-      const result = await pollQrSession(session.session_id);
+      const result = await pollDeviceToken(session.device_code);
       if (cancelled) return;
 
       switch (result.status) {
         case "approved":
           setToken(result.token);
-          setUsername(result.username);
           setPhase("approved");
           return;
         case "expired":
           setPhase("expired");
           return;
+        case "denied":
+          setPhase("denied");
+          return;
+        case "slow_down":
+          intervalMs += 5000;
+          break;
         case "pending":
         default:
           break;
       }
-      pollTimer.current = setTimeout(tick, POLL_INTERVAL_MS);
+      pollTimer.current = setTimeout(tick, intervalMs);
     };
 
-    pollTimer.current = setTimeout(tick, POLL_INTERVAL_MS);
+    pollTimer.current = setTimeout(tick, intervalMs);
     return () => {
       cancelled = true;
       clearPollTimer();
@@ -116,7 +119,8 @@ export default function QrLoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, session]);
 
-  // Sau khi đăng nhập thành công, tải danh sách sách bằng access token vừa nhận
+  // Sau khi đăng nhập thành công, tải danh sách sách bằng access token vừa nhận. Username
+  // không có sẵn trong token response ở luồng Device Grant nên lấy từ chính API sách.
   useEffect(() => {
     if (phase !== "approved" || !token) return;
     let cancelled = false;
@@ -126,7 +130,7 @@ export default function QrLoginPage() {
       .then((data) => {
         if (cancelled) return;
         setBooks(data.books);
-        setUsername((prev) => prev ?? data.authenticatedAs);
+        setUsername(data.authenticatedAs);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -193,8 +197,8 @@ export default function QrLoginPage() {
         <div className="logo">📱➜💻</div>
         <h2>Đăng nhập bằng QR</h2>
         <p>
-          Mở app trên điện thoại đã đăng nhập, chọn <b>Quét mã QR</b> để xác nhận
-          đăng nhập trên thiết bị này.
+          Mở app trên điện thoại đã đăng nhập, chọn <b>Quét mã QR</b> rồi bấm{" "}
+          <b>Cho phép</b> trên trang xác nhận để đăng nhập thiết bị này.
         </p>
 
         {phase === "loading" && <div className="spinner" />}
@@ -204,6 +208,10 @@ export default function QrLoginPage() {
         {phase === "ready" && session && (
           <>
             <canvas ref={canvasRef} style={{ margin: "0 auto", display: "block" }} />
+            <p className="hint">
+              Hoặc vào <b>{session.verification_uri}</b> và nhập mã{" "}
+              <b>{session.user_code}</b>
+            </p>
             <p className="hint">Mã hết hạn sau {secondsLeft}s</p>
           </>
         )}
@@ -213,6 +221,15 @@ export default function QrLoginPage() {
             <div className="alert">Mã QR đã hết hạn.</div>
             <button className="btn btn-blue" onClick={begin}>
               Tạo mã mới
+            </button>
+          </>
+        )}
+
+        {phase === "denied" && (
+          <>
+            <div className="alert">Đã từ chối đăng nhập trên điện thoại.</div>
+            <button className="btn btn-blue" onClick={begin}>
+              Thử lại
             </button>
           </>
         )}

@@ -4,4 +4,3 @@
 /Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/QrLoginResourceProviderFactory.java
 /Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/QrLoginSessionStore.java
 /Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/TokenIntrospection.java
-/Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/TokenIssuer.java

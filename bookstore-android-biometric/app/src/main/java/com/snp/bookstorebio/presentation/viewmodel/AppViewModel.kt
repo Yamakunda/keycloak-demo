@@ -47,6 +47,10 @@ sealed interface UiState {
         val scanningQrMode: QrLoginMode? = null,
         val qrApproveResult: QrApproveResult? = null,
         val pendingQrConfirmation: PendingQrConfirmation? = null,
+        // Chỉ dùng cho LEGACY (Device Authorization Grant): URL xác nhận (verification_uri_complete)
+        // cần mở bằng Custom Tabs sau khi quét — MainActivity quan sát field này để launch Intent,
+        // ViewModel không tự mở Activity được.
+        val urlToOpen: String? = null,
     ) : UiState
 }
 
@@ -129,19 +133,34 @@ class AppViewModel @Inject constructor(
     }
 
     /**
-     * Cả 2 nguồn QR (web thường qua bookstore-fe-qr, hoặc trang login Keycloak qua SPI) đều
-     * chứa cùng định dạng JSON {"apiUrl": "...", "sessionId": "..."} — chỉ khác path approve
-     * cuối cùng, chọn theo mode người dùng đã bấm nút trước khi quét.
-     *
-     * - LEGACY: approve ngay 1 bước như trước (bookstore-api-qr không có bước xác nhận riêng).
-     * - KEYCLOAK_SPI: chỉ gọi /qr-login/scan để ghi nhận danh tính, rồi chuyển sang màn hình
-     *   chờ xác nhận (pendingQrConfirmation) — CHƯA cấp quyền cho thiết bị kia. Người dùng
-     *   phải xác nhận bằng biometric/nhập lại mật khẩu (xem MainActivity.promptConfirmQrApprove)
-     *   thì [onQrApproveConfirmed] mới thật sự gọi /qr-login/approve.
+     * Hai nguồn QR khác hẳn nhau về bản chất, chọn theo mode người dùng đã bấm nút trước khi
+     * quét:
+     * - LEGACY: QR encode thẳng "verification_uri_complete" của OAuth 2.0 Device Authorization
+     *   Grant (RFC 8628, xem bookstore-fe-qr) — app KHÔNG gửi access_token đi đâu cả, chỉ mở
+     *   URL đó bằng Custom Tabs (dùng chung cookie SSO đã đăng nhập) để người dùng tự bấm
+     *   "Cho phép" trên chính trang xác nhận của Keycloak. MainActivity quan sát [urlToOpen]
+     *   để launch Custom Tabs Intent.
+     * - KEYCLOAK_SPI: QR chứa JSON {"apiUrl", "sessionId"} riêng của SPI — gọi /qr-login/scan
+     *   để ghi nhận danh tính, rồi chuyển sang màn hình chờ xác nhận (pendingQrConfirmation)
+     *   — CHƯA cấp quyền cho thiết bị kia. Người dùng phải xác nhận bằng biometric/nhập lại
+     *   mật khẩu (xem MainActivity.promptConfirmQrApprove) thì [onQrApproveConfirmed] mới
+     *   thật sự gọi /qr-login/approve.
      */
     fun onQrCodeScanned(rawValue: String) {
         val current = (_uiState.value as? UiState.LoggedIn) ?: return
         val mode = current.scanningQrMode ?: return
+
+        if (mode == QrLoginMode.LEGACY) {
+            if (!rawValue.startsWith("http://") && !rawValue.startsWith("https://")) {
+                _uiState.value = current.copy(
+                    scanningQrMode = null,
+                    qrApproveResult = QrApproveResult.Failed("Mã QR không hợp lệ."),
+                )
+                return
+            }
+            _uiState.value = current.copy(scanningQrMode = null, urlToOpen = rawValue)
+            return
+        }
 
         val accessToken = authState?.accessToken
         if (accessToken == null) {
@@ -168,27 +187,6 @@ class AppViewModel @Inject constructor(
         }
         val (apiUrl, sessionId) = parsed
 
-        if (mode == QrLoginMode.LEGACY) {
-            _uiState.value = current.copy(scanningQrMode = null, qrApproveResult = QrApproveResult.Approving)
-            viewModelScope.launch {
-                val result = qrLoginApi.approve(
-                    mode = mode,
-                    apiUrl = apiUrl,
-                    sessionId = sessionId,
-                    accessToken = accessToken,
-                    refreshToken = authState?.refreshToken,
-                    expiresIn = null,
-                    scope = authState?.scope,
-                )
-                val latest = (_uiState.value as? UiState.LoggedIn) ?: return@launch
-                _uiState.value = result.fold(
-                    onSuccess = { latest.copy(qrApproveResult = QrApproveResult.Success) },
-                    onFailure = { e -> latest.copy(qrApproveResult = QrApproveResult.Failed(e.message ?: "Lỗi không xác định")) },
-                )
-            }
-            return
-        }
-
         // KEYCLOAK_SPI: gọi /scan trước, chưa cấp quyền — chờ xác nhận biometric.
         _uiState.value = current.copy(scanningQrMode = null, qrApproveResult = QrApproveResult.Approving)
         viewModelScope.launch {
@@ -204,6 +202,12 @@ class AppViewModel @Inject constructor(
                 onFailure = { e -> latest.copy(qrApproveResult = QrApproveResult.Failed(e.message ?: "Lỗi không xác định")) },
             )
         }
+    }
+
+    /** MainActivity gọi ngay sau khi đã launch Custom Tabs Intent cho [urlToOpen]. */
+    fun onUrlOpened() {
+        val current = (_uiState.value as? UiState.LoggedIn) ?: return
+        _uiState.value = current.copy(urlToOpen = null)
     }
 
     fun onQrConfirmationDismissed() {
@@ -233,13 +237,9 @@ class AppViewModel @Inject constructor(
         _uiState.value = current.copy(pendingQrConfirmation = null, qrApproveResult = QrApproveResult.Approving)
         viewModelScope.launch {
             val result = qrLoginApi.approve(
-                mode = QrLoginMode.KEYCLOAK_SPI,
                 apiUrl = pending.apiUrl,
                 sessionId = pending.sessionId,
                 accessToken = accessToken,
-                refreshToken = authState?.refreshToken,
-                expiresIn = null,
-                scope = authState?.scope,
             )
             val latest = (_uiState.value as? UiState.LoggedIn) ?: return@launch
             _uiState.value = result.fold(

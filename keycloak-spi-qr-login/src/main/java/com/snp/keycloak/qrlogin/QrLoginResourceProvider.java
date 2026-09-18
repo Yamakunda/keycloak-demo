@@ -24,10 +24,11 @@ import java.util.Map;
  *   POST /realms/{realm}/qr-login/approve  — app gọi SAU KHI người dùng xác nhận trên điện
  *                                             thoại, mới thật sự cho phép web đăng nhập
  *   POST /realms/{realm}/qr-login/cancel   — app gọi khi người dùng từ chối/huỷ xác nhận
- *   POST /realms/{realm}/qr-login/poll     — web gọi lặp lại để chờ kết quả
+ *   POST /realms/{realm}/qr-login/check    — web (qr-login.ftl) gọi lặp lại để hỏi trạng thái
  *
- * Đây là bản port sang chạy ngay trong Keycloak của route Node.js
- * bookstore-api-qr/src/routes/qrSession.js — cùng logic, khác chỗ chạy.
+ * Đường đi thực tế: check thấy "approved" → trang login tự submit form →
+ * QrLoginAuthenticator.action() (setUser + context.success()) — Keycloak tự issue token qua
+ * flow chuẩn của chính client đang login, không có bước mint token thủ công nào ở SPI này.
  */
 public class QrLoginResourceProvider implements RealmResourceProvider {
 
@@ -159,10 +160,10 @@ public class QrLoginResourceProvider implements RealmResourceProvider {
         }
     }
 
-    // POST /qr-login/check — trang login (qr-login.ftl) gọi lặp lại chỉ để biết đã approved
-    // chưa, KHÔNG issue token và KHÔNG xoá session (khác /poll dùng cho web/app rời rạc) —
-    // sau khi thấy approved=true, trang login tự submit form để Authenticator.action() xử lý
-    // tiếp trong flow chuẩn (setUser + success), lúc đó Keycloak mới thật sự issue token.
+    // POST /qr-login/check — trang login (qr-login.ftl) gọi lặp lại chỉ để biết trạng thái
+    // hiện tại (pending/scanned/approved), KHÔNG issue token và KHÔNG xoá session — sau khi
+    // thấy approved=true, trang login tự submit form để Authenticator.action() xử lý tiếp
+    // trong flow chuẩn (setUser + success), lúc đó Keycloak mới thật sự issue token.
     @POST
     @Path("check")
     @Consumes(MediaType.APPLICATION_JSON)
@@ -177,40 +178,6 @@ public class QrLoginResourceProvider implements RealmResourceProvider {
             return Response.status(Response.Status.NOT_FOUND).entity(Map.of("status", "expired")).build();
         }
         return Response.ok(Map.of("status", qrSession.status)).build();
-    }
-
-    @POST
-    @Path("poll")
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Produces(MediaType.APPLICATION_JSON)
-    public Response poll(Map<String, Object> body) {
-        String sessionId = (String) body.get("session_id");
-        if (sessionId == null || sessionId.isBlank()) {
-            return errorResponse(Response.Status.BAD_REQUEST, "invalid_request", "Thiếu session_id");
-        }
-
-        QrLoginSessionStore store = QrLoginSessionStore.getInstance();
-        QrLoginSessionStore.Session qrSession = store.get(sessionId);
-        if (qrSession == null) {
-            return Response.status(Response.Status.NOT_FOUND).entity(Map.of("status", "expired")).build();
-        }
-        if ("pending".equals(qrSession.status)) {
-            return Response.ok(Map.of("status", "pending")).build();
-        }
-
-        // Trả 1 lần rồi xoá — tránh issue token thêm lần nữa nếu web gọi poll trùng lặp.
-        store.remove(sessionId);
-        try {
-            var tokenResponse = TokenIssuer.issueFor(session, qrSession.userId);
-            return Response.ok(Map.of(
-                    "status", "approved",
-                    "username", qrSession.username,
-                    "token", tokenResponse
-            )).build();
-        } catch (Exception e) {
-            logger.error("QR poll: issue token failed", e);
-            return errorResponse(Response.Status.INTERNAL_SERVER_ERROR, "server_error", "Không tạo được token: " + e.getMessage());
-        }
     }
 
     private Response errorResponse(Response.Status status, String error, String message) {

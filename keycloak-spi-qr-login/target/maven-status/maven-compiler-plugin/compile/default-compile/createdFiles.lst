@@ -6,4 +6,3 @@ com/snp/keycloak/qrlogin/QrLoginResourceProviderFactory.class
 com/snp/keycloak/qrlogin/TokenIntrospection.class
 com/snp/keycloak/qrlogin/QrLoginSessionStore.class
 com/snp/keycloak/qrlogin/QrLoginAuthenticatorFactory.class
-com/snp/keycloak/qrlogin/TokenIssuer.class

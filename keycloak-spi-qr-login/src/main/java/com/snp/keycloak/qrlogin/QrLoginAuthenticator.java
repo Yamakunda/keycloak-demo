@@ -12,7 +12,7 @@ import org.keycloak.models.UserModel;
  * tự poll trạng thái qua REST API /realms/{realm}/qr-login/* (QrLoginResourceProvider) và khi
  * thấy "approved" thì tự submit lại action URL của chính authenticator này (kèm session_id)
  * để hoàn tất bước xác thực ngay trong flow chuẩn — Keycloak sẽ tự tạo session/issue token
- * như mọi authenticator khác, không cần TokenIssuer thủ công.
+ * như mọi authenticator khác, không cần tự mint token bằng TokenManager thủ công.
  */
 public class QrLoginAuthenticator implements Authenticator {
 

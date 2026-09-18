@@ -1,6 +1,7 @@
 package com.snp.bookstorebio.presentation.ui
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -10,6 +11,7 @@ import androidx.activity.viewModels
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricPrompt
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,10 +36,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
@@ -233,6 +237,7 @@ class MainActivity : FragmentActivity() {
                         onQrApproveResultDismiss = { viewModel.onQrApproveResultDismissed() },
                         onQrConfirmClick = { promptConfirmQrApprove() },
                         onQrConfirmDismiss = { viewModel.onQrConfirmationDismissed() },
+                        onUrlOpened = { viewModel.onUrlOpened() },
                     )
                 }
             }
@@ -254,8 +259,19 @@ fun BookstoreApp(
     onQrApproveResultDismiss: () -> Unit,
     onQrConfirmClick: () -> Unit,
     onQrConfirmDismiss: () -> Unit,
+    onUrlOpened: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+
+    // LEGACY (Device Authorization Grant): mở verification_uri_complete bằng Custom Tabs
+    // ngay khi ViewModel set urlToOpen — dùng chung cookie SSO của Chrome nếu đã đăng nhập,
+    // không cần gọi API nào từ app.
+    LaunchedEffect((state as? UiState.LoggedIn)?.urlToOpen) {
+        val url = (state as? UiState.LoggedIn)?.urlToOpen ?: return@LaunchedEffect
+        CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(url))
+        onUrlOpened()
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Bookstore — Biometric") }) }
@@ -401,7 +417,7 @@ private fun BooksScreen(
                 onClick = { onScanQrClick(QrLoginMode.LEGACY) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Quét QR trên trang web thường")
+                Text("Quét QR trên trang web thường (Device Grant)")
             }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
