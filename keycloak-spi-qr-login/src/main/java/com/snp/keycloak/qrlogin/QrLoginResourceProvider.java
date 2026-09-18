@@ -137,6 +137,8 @@ public class QrLoginResourceProvider implements RealmResourceProvider {
         }
     }
 
+    private static final long LONG_POLL_TIMEOUT_MILLIS = 30_000;
+
     @POST
     @Path("check")
     @Consumes(MediaType.APPLICATION_JSON)
@@ -146,11 +148,32 @@ public class QrLoginResourceProvider implements RealmResourceProvider {
         if (sessionId == null || sessionId.isBlank()) {
             return errorResponse(Response.Status.BAD_REQUEST, "invalid_request", "Missing session_id");
         }
-        QrLoginSessionStore.Session qrSession = QrLoginSessionStore.getInstance().get(sessionId);
+
+        QrLoginSessionStore store = QrLoginSessionStore.getInstance();
+        QrLoginSessionStore.Session qrSession = store.get(sessionId);
         if (qrSession == null) {
             return Response.status(Response.Status.NOT_FOUND).entity(Map.of("status", "expired")).build();
         }
-        return Response.ok(Map.of("status", qrSession.status)).build();
+
+        // Khi client gửi known_status, giữ request treo tới khi trạng thái đổi (hoặc timeout)
+        // để không phải poll liên tục. Không gửi thì trả trạng thái hiện tại ngay.
+        String knownStatus = (String) body.get("known_status");
+        if (knownStatus == null || knownStatus.isBlank()) {
+            return Response.ok(Map.of("status", qrSession.status)).build();
+        }
+
+        String status;
+        try {
+            status = store.awaitStatusChange(sessionId, knownStatus, LONG_POLL_TIMEOUT_MILLIS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            status = qrSession.status;
+        }
+
+        if (status == null) {
+            return Response.status(Response.Status.NOT_FOUND).entity(Map.of("status", "expired")).build();
+        }
+        return Response.ok(Map.of("status", status)).build();
     }
 
     private Response errorResponse(Response.Status status, String error, String message) {

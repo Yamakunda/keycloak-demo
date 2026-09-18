@@ -19,7 +19,6 @@
         <script src="${url.resourcesPath}/js/qrcode.min.js"></script>
         <script>
             (function () {
-                var pollIntervalMs = 2000;
                 var loginActionUrl = "${url.loginAction}";
                 var realmBaseUrl = loginActionUrl.substring(0, loginActionUrl.indexOf("/login-actions/"));
                 var qrLoginBase = realmBaseUrl + "/qr-login";
@@ -32,8 +31,10 @@
                 var sessionId = "${qrSessionId}";
                 var expiresIn = ${qrExpiresIn?c};
                 var remainingSeconds = expiresIn;
-                var pollTimer = null;
                 var countdownTimer = null;
+                // Tăng mỗi lần sinh QR mới — long-poll của phiên cũ đang treo sẽ tự bỏ kết quả
+                // khi thấy generation đã đổi, tránh ghi đè trạng thái của QR mới.
+                var generation = 0;
 
                 function formatRemaining(seconds) {
                     var m = Math.floor(seconds / 60);
@@ -50,11 +51,6 @@
                     }
                 }
 
-                function stopTimers() {
-                    if (pollTimer) clearInterval(pollTimer);
-                    if (countdownTimer) clearInterval(countdownTimer);
-                }
-
                 function startCountdown() {
                     if (countdownTimer) clearInterval(countdownTimer);
                     remainingSeconds = expiresIn;
@@ -63,6 +59,7 @@
                         remainingSeconds -= 1;
                         if (remainingSeconds <= 0) {
                             clearInterval(countdownTimer);
+                            refreshSession();
                             return;
                         }
                         countdownEl.textContent = "Expires in " + formatRemaining(remainingSeconds);
@@ -70,62 +67,75 @@
                 }
 
                 function refreshSession() {
-                    stopTimers();
+                    if (countdownTimer) clearInterval(countdownTimer);
+                    generation += 1;
+                    var myGeneration = generation;
+
                     statusEl.textContent = "QR code expired — generating a new one…";
                     fetch(qrLoginBase + "/start", { method: "POST" })
                         .then(function (r) { return r.json(); })
                         .then(function (data) {
+                            if (myGeneration !== generation) return;
                             sessionId = data.session_id;
                             expiresIn = data.expires_in;
                             sessionIdInput.value = sessionId;
                             drawQr(sessionId);
                             statusEl.textContent = "Waiting for scan…";
                             startCountdown();
-                            startPolling();
+                            waitForStatusChange(myGeneration, "pending");
                         })
                         .catch(function () {
+                            if (myGeneration !== generation) return;
                             statusEl.textContent = "Failed to generate a new QR code — please reload the page.";
                         });
                 }
 
-                function startPolling() {
-                    if (pollTimer) clearInterval(pollTimer);
-                    var elapsed = 0;
-                    pollTimer = setInterval(function () {
-                        elapsed += pollIntervalMs;
-                        if (elapsed >= expiresIn * 1000) {
-                            clearInterval(pollTimer);
-                            refreshSession();
-                            return;
-                        }
+                // Long polling: server giữ request treo tới khi status khác knownStatus hoặc
+                // hết timeout, nên không cần gọi lặp mỗi vài giây.
+                function waitForStatusChange(myGeneration, knownStatus) {
+                    if (myGeneration !== generation) return;
 
-                        fetch(qrLoginBase + "/check", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ session_id: sessionId })
+                    fetch(qrLoginBase + "/check", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ session_id: sessionId, known_status: knownStatus })
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (myGeneration !== generation) return;
+
+                            if (data.status === "approved") {
+                                if (countdownTimer) clearInterval(countdownTimer);
+                                generation += 1;
+                                statusEl.textContent = "Confirmed! Signing in…";
+                                document.getElementById("kc-qr-form").submit();
+                                return;
+                            }
+
+                            if (data.status === "expired") {
+                                refreshSession();
+                                return;
+                            }
+
+                            if (data.status === "scanned") {
+                                statusEl.textContent = "Scanned — confirm on your phone";
+                            } else {
+                                statusEl.textContent = "Waiting for scan…";
+                            }
+                            waitForStatusChange(myGeneration, data.status);
                         })
-                            .then(function (r) { return r.json(); })
-                            .then(function (data) {
-                                if (data.status === "approved") {
-                                    stopTimers();
-                                    statusEl.textContent = "Confirmed! Signing in…";
-                                    document.getElementById("kc-qr-form").submit();
-                                } else if (data.status === "scanned") {
-                                    statusEl.textContent = "Scanned — confirm on your phone";
-                                } else if (data.status === "expired") {
-                                    clearInterval(pollTimer);
-                                    refreshSession();
-                                } else {
-                                    statusEl.textContent = "Waiting for scan…";
-                                }
-                            })
-                            .catch(function () {});
-                    }, pollIntervalMs);
+                        .catch(function () {
+                            if (myGeneration !== generation) return;
+                            setTimeout(function () {
+                                waitForStatusChange(myGeneration, knownStatus);
+                            }, 3000);
+                        });
                 }
 
+                generation = 1;
                 drawQr(sessionId);
                 startCountdown();
-                startPolling();
+                waitForStatusChange(generation, "pending");
             })();
         </script>
     <#elseif section = "info">

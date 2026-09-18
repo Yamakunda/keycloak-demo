@@ -1,103 +1,64 @@
 <#import "template.ftl" as layout>
+<#import "field.ftl" as field>
+<#import "buttons.ftl" as buttons>
+<#import "social-providers.ftl" as identityProviders>
 <@layout.registrationLayout displayMessage=!messagesPerField.existsError('username','password') displayInfo=realm.password && realm.registrationAllowed && !registrationDisabled??; section>
+
     <#if section = "header">
         ${msg("loginAccountTitle")}
     <#elseif section = "form">
-        <div id="qr-combined-layout">
+        <#assign showQr = showQrLogin?? && showQrLogin>
+        <div id="qr-combined-layout" class="<#if !showQr>qr-single-col</#if>">
           <div id="qr-combined-password-col">
-            <#if realm.password>
-                <form id="kc-form-login" onsubmit="login.disabled = true; return true;" action="${url.loginAction}" method="post">
-                    <#if !usernameHidden??>
-                        <div class="${properties.kcFormGroupClass!}">
-                            <label for="username" class="${properties.kcLabelClass!}"><#if !realm.loginWithEmailAllowed>${msg("username")}<#elseif !realm.registrationEmailAsUsername>${msg("usernameOrEmail")}<#else>${msg("email")}</#if></label>
-
-                            <input tabindex="2" id="username" class="${properties.kcInputClass!}" name="username" value="${(login.username!'')}"  type="text" autofocus autocomplete="username"
-                                   aria-invalid="<#if messagesPerField.existsError('username','password')>true</#if>"
-                                   dir="ltr"
-                            />
-
-                            <#if messagesPerField.existsError('username','password')>
-                                <span id="input-error" class="${properties.kcInputErrorMessageClass!}" aria-live="polite">
-                                        ${kcSanitize(messagesPerField.getFirstError('username','password'))?no_esc}
-                                </span>
-                            </#if>
-
-                        </div>
-                    </#if>
-
-                    <div class="${properties.kcFormGroupClass!}">
-                        <label for="password" class="${properties.kcLabelClass!}">${msg("password")}</label>
-
-                        <div class="${properties.kcInputGroup!}" dir="ltr">
-                            <input tabindex="3" id="password" class="${properties.kcInputClass!}" name="password" type="password" autocomplete="current-password"
-                                   aria-invalid="<#if messagesPerField.existsError('username','password')>true</#if>"
-                            />
-                            <button class="${properties.kcFormPasswordVisibilityButtonClass!}" type="button" aria-label="${msg("showPassword")}"
-                                    aria-controls="password" data-password-toggle tabindex="4"
-                                    data-icon-show="${properties.kcFormPasswordVisibilityIconShow!}" data-icon-hide="${properties.kcFormPasswordVisibilityIconHide!}"
-                                    data-label-show="${msg('showPassword')}" data-label-hide="${msg('hidePassword')}">
-                                <i class="${properties.kcFormPasswordVisibilityIconShow!}" aria-hidden="true"></i>
-                            </button>
-                        </div>
-
-                        <#if usernameHidden?? && messagesPerField.existsError('username','password')>
-                            <span id="input-error" class="${properties.kcInputErrorMessageClass!}" aria-live="polite">
-                                    ${kcSanitize(messagesPerField.getFirstError('username','password'))?no_esc}
-                            </span>
+            <div id="kc-form">
+              <div id="kc-form-wrapper">
+                <#if realm.password>
+                    <form id="kc-form-login" class="${properties.kcFormClass!}" onsubmit="login.disabled = true; return true;" action="${url.loginAction}" method="post" novalidate="novalidate">
+                        <#if !usernameHidden??>
+                            <#assign label>
+                                <#if !realm.loginWithEmailAllowed>${msg("username")}<#elseif !realm.registrationEmailAsUsername>${msg("usernameOrEmail")}<#else>${msg("email")}</#if>
+                            </#assign>
+                            <@field.input name="username" label=label error=kcSanitize(messagesPerField.getFirstError('username','password'))?no_esc autofocus=true autocomplete="username" value=login.username!'' />
+                            <@field.password name="password" label=msg("password") error="" forgotPassword=realm.resetPasswordAllowed autofocus=usernameHidden?? autocomplete="current-password" />
+                        <#else>
+                            <@field.password name="password" label=msg("password") forgotPassword=realm.resetPasswordAllowed autofocus=usernameHidden?? autocomplete="current-password" />
                         </#if>
 
-                    </div>
-
-                    <div class="${properties.kcFormGroupClass!} ${properties.kcFormSettingClass!}">
-                        <div id="kc-form-options">
+                        <div class="${properties.kcFormGroupClass!}">
                             <#if realm.rememberMe && !usernameHidden??>
-                                <div class="checkbox">
-                                    <label>
-                                        <#if login.rememberMe??>
-                                            <input tabindex="5" id="rememberMe" name="rememberMe" type="checkbox" checked> ${msg("rememberMe")}
-                                        <#else>
-                                            <input tabindex="5" id="rememberMe" name="rememberMe" type="checkbox"> ${msg("rememberMe")}
-                                        </#if>
-                                    </label>
-                                </div>
+                                <@field.checkbox name="rememberMe" label=msg("rememberMe") value=login.rememberMe?? />
                             </#if>
-                            </div>
-                            <div class="${properties.kcFormOptionsWrapperClass!}">
-                                <#if realm.resetPasswordAllowed>
-                                    <span><a tabindex="6" href="${url.loginResetCredentialsUrl}">${msg("doForgotPassword")}</a></span>
-                                </#if>
-                            </div>
+                        </div>
 
-                      </div>
-
-                      <div id="kc-form-buttons" class="${properties.kcFormGroupClass!}">
-                          <input type="hidden" id="id-hidden-input" name="credentialId" <#if auth.selectedCredential?has_content>value="${auth.selectedCredential}"</#if>/>
-                          <input tabindex="7" class="${properties.kcButtonClass!} ${properties.kcButtonPrimaryClass!} ${properties.kcButtonBlockClass!} ${properties.kcButtonLargeClass!}" name="login" id="kc-login" type="submit" value="${msg("doLogIn")}"/>
-                      </div>
-                </form>
-            </#if>
+                        <input type="hidden" id="id-hidden-input" name="credentialId" <#if auth.selectedCredential?has_content>value="${auth.selectedCredential}"</#if>/>
+                        <@buttons.loginButton />
+                    </form>
+                </#if>
+              </div>
+            </div>
           </div>
 
+          <#if showQr>
           <div id="qr-combined-divider"></div>
 
           <div id="qr-combined-qr-col">
             <div id="qr-canvas-wrapper">
                 <canvas id="qr-canvas"></canvas>
             </div>
-            <p id="qr-status" class="kc-feedback-text">${msg("qrCombinedScanHint")}</p>
-            <p id="qr-countdown" class="kc-feedback-text"></p>
+            <p id="qr-status">${msg("qrCombinedScanHint")}</p>
+            <p id="qr-countdown">&nbsp;</p>
 
             <form id="kc-qr-form" action="${url.loginAction}" method="post" style="display:none;">
                 <input type="hidden" id="qr-session-id-input" name="qr_session_id" value=""/>
-                <input type="hidden" name="qr_combined_login" value="true"/>
             </form>
           </div>
+          </#if>
         </div>
 
+        <#if showQr>
         <script src="${url.resourcesPath}/js/qrcode.min.js"></script>
         <script>
             (function () {
-                var pollIntervalMs = 2000;
                 var loginActionUrl = "${url.loginAction}";
                 var realmBaseUrl = loginActionUrl.substring(0, loginActionUrl.indexOf("/login-actions/"));
                 var qrLoginBase = realmBaseUrl + "/qr-login";
@@ -110,8 +71,10 @@
                 var sessionId = null;
                 var expiresIn = 0;
                 var remainingSeconds = 0;
-                var pollTimer = null;
                 var countdownTimer = null;
+                // Tăng mỗi lần sinh QR mới — long-poll của phiên cũ đang treo sẽ tự bỏ kết quả
+                // khi thấy generation đã đổi, tránh ghi đè trạng thái của QR mới.
+                var generation = 0;
 
                 function formatRemaining(seconds) {
                     var m = Math.floor(seconds / 60);
@@ -122,119 +85,112 @@
                 function drawQr(payloadSessionId) {
                     var qrPayload = JSON.stringify({ apiUrl: realmBaseUrl, sessionId: payloadSessionId });
                     if (window.QRCode && canvas) {
-                        QRCode.toCanvas(canvas, qrPayload, { width: 220, margin: 1 });
+                        QRCode.toCanvas(canvas, qrPayload, { width: 200, margin: 1 });
                     } else if (canvas) {
                         statusEl.textContent = "${msg("qrCombinedLibraryError")}";
                     }
                 }
 
-                function stopTimers() {
-                    if (pollTimer) clearInterval(pollTimer);
-                    if (countdownTimer) clearInterval(countdownTimer);
+                function updateCountdownText() {
+                    countdownEl.textContent = "${msg("qrCombinedExpiresIn")}" + " " + formatRemaining(remainingSeconds);
                 }
 
                 function startCountdown() {
                     if (countdownTimer) clearInterval(countdownTimer);
                     remainingSeconds = expiresIn;
-                    countdownEl.textContent = "${msg("qrCombinedExpiresIn")}" + formatRemaining(remainingSeconds);
+                    updateCountdownText();
                     countdownTimer = setInterval(function () {
                         remainingSeconds -= 1;
                         if (remainingSeconds <= 0) {
                             clearInterval(countdownTimer);
+                            refreshSession();
                             return;
                         }
-                        countdownEl.textContent = "${msg("qrCombinedExpiresIn")}" + formatRemaining(remainingSeconds);
+                        updateCountdownText();
                     }, 1000);
                 }
 
                 function refreshSession() {
-                    stopTimers();
+                    if (countdownTimer) clearInterval(countdownTimer);
+                    generation += 1;
+                    var myGeneration = generation;
+
                     statusEl.textContent = "${msg("qrCombinedRegenerating")}";
                     fetch(qrLoginBase + "/start", { method: "POST" })
                         .then(function (r) { return r.json(); })
                         .then(function (data) {
+                            if (myGeneration !== generation) return;
                             sessionId = data.session_id;
                             expiresIn = data.expires_in;
                             sessionIdInput.value = sessionId;
                             drawQr(sessionId);
                             statusEl.textContent = "${msg("qrCombinedScanHint")}";
                             startCountdown();
-                            startPolling();
+                            waitForStatusChange(myGeneration, "pending");
                         })
                         .catch(function () {
+                            if (myGeneration !== generation) return;
                             statusEl.textContent = "${msg("qrCombinedStartError")}";
                         });
                 }
 
-                function startPolling() {
-                    if (pollTimer) clearInterval(pollTimer);
-                    var elapsed = 0;
-                    pollTimer = setInterval(function () {
-                        elapsed += pollIntervalMs;
-                        if (elapsed >= expiresIn * 1000) {
-                            clearInterval(pollTimer);
-                            refreshSession();
-                            return;
-                        }
+                // Long polling: server giữ request treo tới khi status khác knownStatus hoặc
+                // hết timeout, nên không cần gọi lặp mỗi vài giây.
+                function waitForStatusChange(myGeneration, knownStatus) {
+                    if (myGeneration !== generation) return;
 
-                        fetch(qrLoginBase + "/check", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ session_id: sessionId })
+                    fetch(qrLoginBase + "/check", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ session_id: sessionId, known_status: knownStatus })
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (myGeneration !== generation) return;
+
+                            if (data.status === "approved") {
+                                if (countdownTimer) clearInterval(countdownTimer);
+                                generation += 1;
+                                statusEl.textContent = "${msg("qrCombinedApproved")}";
+                                document.getElementById("kc-qr-form").submit();
+                                return;
+                            }
+
+                            if (data.status === "expired") {
+                                refreshSession();
+                                return;
+                            }
+
+                            if (data.status === "scanned") {
+                                statusEl.textContent = "${msg("qrCombinedScanned")}";
+                            } else {
+                                statusEl.textContent = "${msg("qrCombinedScanHint")}";
+                            }
+                            waitForStatusChange(myGeneration, data.status);
                         })
-                            .then(function (r) { return r.json(); })
-                            .then(function (data) {
-                                if (data.status === "approved") {
-                                    stopTimers();
-                                    statusEl.textContent = "${msg("qrCombinedApproved")}";
-                                    document.getElementById("kc-qr-form").submit();
-                                } else if (data.status === "scanned") {
-                                    statusEl.textContent = "${msg("qrCombinedScanned")}";
-                                } else if (data.status === "expired") {
-                                    clearInterval(pollTimer);
-                                    refreshSession();
-                                } else {
-                                    statusEl.textContent = "${msg("qrCombinedScanHint")}";
-                                }
-                            })
-                            .catch(function () {});
-                    }, pollIntervalMs);
+                        .catch(function () {
+                            if (myGeneration !== generation) return;
+                            setTimeout(function () {
+                                waitForStatusChange(myGeneration, knownStatus);
+                            }, 3000);
+                        });
                 }
 
                 refreshSession();
             })();
         </script>
+        </#if>
     <#elseif section = "info" >
         <#if realm.password && realm.registrationAllowed && !registrationDisabled??>
-            <div id="kc-registration-container">
-                <div id="kc-registration">
-                    <span>${msg("noAccount")} <a tabindex="8"
-                                                 href="${url.registrationUrl}">${msg("doRegister")}</a></span>
+            <div id="kc-registration-container" class="${properties.kcLoginFooterBand!}">
+                <div id="kc-registration" class="${properties.kcLoginFooterBandItem!}">
+                    <span>${msg("noAccount")} <a href="${url.registrationUrl}">${msg("doRegister")}</a></span>
                 </div>
             </div>
         </#if>
     <#elseif section = "socialProviders" >
-        <#if realm.password && social?? && social.providers?has_content>
-            <div id="kc-social-providers" class="${properties.kcFormSocialAccountSectionClass!}">
-                <hr/>
-                <h2>${msg("identity-provider-login-label")}</h2>
-
-                <ul class="${properties.kcFormSocialAccountListClass!} <#if social.providers?size gt 3>${properties.kcFormSocialAccountListGridClass!}</#if>">
-                    <#list social.providers as p>
-                        <li>
-                            <a id="social-${p.alias}" class="${properties.kcFormSocialAccountListButtonClass!} <#if social.providers?size gt 3>${properties.kcFormSocialAccountGridItem!}</#if>"
-                                    type="button" href="${p.loginUrl}">
-                                <#if p.iconClasses?has_content>
-                                    <i class="${properties.kcCommonLogoIdP!} ${p.iconClasses!}" aria-hidden="true"></i>
-                                    <span class="${properties.kcFormSocialAccountNameClass!} kc-social-icon-text">${p.displayName!}</span>
-                                <#else>
-                                    <span class="${properties.kcFormSocialAccountNameClass!}">${p.displayName!}</span>
-                                </#if>
-                            </a>
-                        </li>
-                    </#list>
-                </ul>
-            </div>
+        <#if realm.password && social.providers?? && social.providers?has_content>
+            <@identityProviders.show social=social/>
         </#if>
     </#if>
 

@@ -52,6 +52,26 @@ final class QrLoginSessionStore {
         return session;
     }
 
+    /**
+     * Chờ tới khi status khác {@code knownStatus} hoặc hết {@code timeoutMillis} — để trang
+     * login long-poll thay vì gọi /check liên tục. Trả về status hiện tại, hoặc null nếu
+     * phiên đã hết hạn/bị xoá.
+     */
+    String awaitStatusChange(String id, String knownStatus, long timeoutMillis) throws InterruptedException {
+        Session session = get(id);
+        if (session == null) return null;
+
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        synchronized (session) {
+            while (session.status.equals(knownStatus)) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) break;
+                session.wait(remaining);
+            }
+            return session.status;
+        }
+    }
+
     boolean scan(String id, String userId, String username) {
         Session session = get(id);
         if (session == null || "approved".equals(session.status)) {
@@ -62,6 +82,7 @@ final class QrLoginSessionStore {
             session.status = "scanned";
             session.userId = userId;
             session.username = username;
+            session.notifyAll();
         }
         return true;
     }
@@ -75,6 +96,7 @@ final class QrLoginSessionStore {
             if (!"scanned".equals(session.status) || !userId.equals(session.userId)) return false;
             session.status = "approved";
             session.username = username;
+            session.notifyAll();
         }
         return true;
     }
@@ -93,6 +115,7 @@ final class QrLoginSessionStore {
             session.status = "pending";
             session.userId = null;
             session.username = null;
+            session.notifyAll();
         }
         return true;
     }
