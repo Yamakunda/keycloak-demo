@@ -1,1 +1,2 @@
 com.snp.keycloak.qrlogin.QrLoginAuthenticatorFactory
+com.snp.keycloak.qrlogin.QrLoginCombinedAuthenticatorFactory

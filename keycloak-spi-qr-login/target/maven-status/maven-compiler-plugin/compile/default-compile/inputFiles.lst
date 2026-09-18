@@ -1,5 +1,7 @@
 /Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/QrLoginAuthenticator.java
 /Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/QrLoginAuthenticatorFactory.java
+/Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/QrLoginCombinedAuthenticator.java
+/Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/QrLoginCombinedAuthenticatorFactory.java
 /Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/QrLoginResourceProvider.java
 /Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/QrLoginResourceProviderFactory.java
 /Users/yamakun/Desktop/SNP/Keycloak/keycloak-spi-qr-login/src/main/java/com/snp/keycloak/qrlogin/QrLoginSessionStore.java

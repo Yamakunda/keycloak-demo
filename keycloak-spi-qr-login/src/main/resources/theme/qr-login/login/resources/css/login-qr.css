@@ -1,0 +1,48 @@
+#qr-combined-layout {
+    display: flex;
+    align-items: stretch;
+    gap: 32px;
+}
+
+#qr-combined-password-col {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+#qr-combined-divider {
+    width: 1px;
+    background-color: var(--pf-v5-global--BorderColor--100, #d2d2d2);
+}
+
+#qr-combined-qr-col {
+    flex: 0 0 240px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+#qr-canvas-wrapper {
+    margin: 8px 0 16px;
+}
+
+#qr-status,
+#qr-countdown {
+    font-size: 0.85rem;
+    margin: 4px 0;
+}
+
+@media (max-width: 640px) {
+    #qr-combined-layout {
+        flex-direction: column;
+    }
+
+    #qr-combined-divider {
+        width: auto;
+        height: 1px;
+    }
+
+    #qr-combined-qr-col {
+        flex: 0 0 auto;
+    }
+}
