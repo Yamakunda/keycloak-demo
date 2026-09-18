@@ -6,10 +6,6 @@ import org.keycloak.models.KeycloakSessionFactory;
 import org.keycloak.services.resource.RealmResourceProvider;
 import org.keycloak.services.resource.RealmResourceProviderFactory;
 
-/**
- * Đăng ký endpoint REST tùy biến tại /realms/{realm}/qr-login/* — factory id "qr-login"
- * phải khớp với tên file trong META-INF/services.
- */
 public class QrLoginResourceProviderFactory implements RealmResourceProviderFactory {
 
     public static final String ID = "qr-login";

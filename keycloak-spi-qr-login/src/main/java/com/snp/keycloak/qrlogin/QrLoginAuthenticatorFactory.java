@@ -29,7 +29,7 @@ public class QrLoginAuthenticatorFactory implements AuthenticatorFactory {
 
     @Override
     public String getDisplayType() {
-        return "Đăng nhập bằng QR (Cross-Device)";
+        return "QR Login (Cross-Device)";
     }
 
     @Override
@@ -54,7 +54,7 @@ public class QrLoginAuthenticatorFactory implements AuthenticatorFactory {
 
     @Override
     public String getHelpText() {
-        return "Hiện mã QR để đăng nhập bằng cách quét từ app di động đã đăng nhập sẵn (OAuth2-style cross-device login), thay cho nhập username/password.";
+        return "Shows a QR code that can be scanned from an already logged-in mobile app to sign in (OAuth2-style cross-device login), instead of entering a username/password.";
     }
 
     @Override

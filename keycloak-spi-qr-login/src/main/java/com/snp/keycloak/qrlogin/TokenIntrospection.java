@@ -6,11 +6,6 @@ import org.keycloak.models.RealmModel;
 import org.keycloak.representations.AccessToken;
 import org.keycloak.services.util.DefaultClientSessionContext;
 
-/**
- * Verify access_token app Android gửi lên (đã đăng nhập qua Authorization Code + PKCE ở
- * client biometric-demo) — dùng public key của chính realm đang xử lý request, không cần
- * gọi round-trip JWKS endpoint vì đang chạy ngay trong Keycloak.
- */
 final class TokenIntrospection {
 
     record Result(String userId, String username) {
@@ -28,7 +23,7 @@ final class TokenIntrospection {
                 .getToken();
 
         if (token.getSubject() == null) {
-            throw new IllegalArgumentException("Token thiếu subject");
+            throw new IllegalArgumentException("Token is missing subject");
         }
 
         return new Result(token.getSubject(), token.getPreferredUsername());

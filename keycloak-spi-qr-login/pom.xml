@@ -12,13 +12,14 @@
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Phải khớp version image Keycloak trong docker-compose.yml (quay.io/keycloak/keycloak:26.1.4) -->
+        <!-- Must match the Keycloak image version in docker-compose.yml (quay.io/keycloak/keycloak:26.1.4) -->
         <keycloak.version>26.1.4</keycloak.version>
     </properties>
 
     <dependencies>
-        <!-- Toàn bộ dependency Keycloak đều "provided" — đã có sẵn trong classpath server lúc chạy,
-             KHÔNG được đóng gói vào JAR (nếu đóng gói sẽ xung đột version với server). -->
+        <!-- All Keycloak dependencies are "provided" — already on the server classpath at
+             runtime; must NOT be bundled into the JAR (bundling would conflict with the
+             server's own version). -->
         <dependency>
             <groupId>org.keycloak</groupId>
             <artifactId>keycloak-server-spi</artifactId>

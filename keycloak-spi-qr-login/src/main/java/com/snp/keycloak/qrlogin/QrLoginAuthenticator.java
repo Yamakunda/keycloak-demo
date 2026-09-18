@@ -6,14 +6,6 @@ import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
 
-/**
- * Bước xác thực "Đăng nhập bằng QR" — đặt ALTERNATIVE song song với Username Password Form
- * trong Browser Flow. Khi được chọn, render trang riêng (qr-login.ftl) hiện mã QR; trang đó
- * tự poll trạng thái qua REST API /realms/{realm}/qr-login/* (QrLoginResourceProvider) và khi
- * thấy "approved" thì tự submit lại action URL của chính authenticator này (kèm session_id)
- * để hoàn tất bước xác thực ngay trong flow chuẩn — Keycloak sẽ tự tạo session/issue token
- * như mọi authenticator khác, không cần tự mint token bằng TokenManager thủ công.
- */
 public class QrLoginAuthenticator implements Authenticator {
 
     static final String SESSION_ID_PARAM = "qr_session_id";
@@ -32,7 +24,7 @@ public class QrLoginAuthenticator implements Authenticator {
         String sessionId = context.getHttpRequest().getDecodedFormParameters().getFirst(SESSION_ID_PARAM);
         if (sessionId == null || sessionId.isBlank()) {
             context.challenge(context.form()
-                    .setError("Thiếu session_id")
+                    .setError("Missing session_id")
                     .createForm("qr-login.ftl"));
             return;
         }
@@ -43,7 +35,7 @@ public class QrLoginAuthenticator implements Authenticator {
             context.challenge(context.form()
                     .setAttribute("qrSessionId", sessionId)
                     .setAttribute("qrExpiresIn", QrLoginSessionStore.TTL_SECONDS)
-                    .setError("Phiên QR chưa được xác nhận hoặc đã hết hạn")
+                    .setError("QR session has not been confirmed or has expired")
                     .createForm("qr-login.ftl"));
             return;
         }
@@ -55,7 +47,7 @@ public class QrLoginAuthenticator implements Authenticator {
 
         if (user == null) {
             context.challenge(context.form()
-                    .setError("Không tìm thấy người dùng đã xác nhận QR")
+                    .setError("Could not find the user who confirmed the QR login")
                     .createForm("qr-login.ftl"));
             return;
         }
