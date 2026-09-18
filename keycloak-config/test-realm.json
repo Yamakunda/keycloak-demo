@@ -551,7 +551,8 @@
       "alwaysDisplayInConsole": false,
       "clientAuthenticatorType": "client-secret",
       "redirectUris": [
-        "com.snp.bookstorebio:/oauth2redirect"
+        "com.snp.bookstorebio:/oauth2redirect",
+        "bookstorebioexpo://oauth2redirect"
       ],
       "webOrigins": [],
       "notBefore": 0,

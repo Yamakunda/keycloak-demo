@@ -1,13 +1,10 @@
-import { useState } from "react";
-import { startLogin } from "../services/authService";
+import { useAuth } from "../context/AuthContext";
 
 export default function LoginPage() {
-  const [error, setError] = useState("");
-
-  const onClick = () => {
-    setError("");
-    startLogin().catch((e) => setError(e instanceof Error ? e.message : "Lỗi không xác định"));
-  };
+  const { login } = useAuth();
+  // Backend redirect về đây kèm ?error=... nếu đổi code lấy token thất bại
+  // (xem bookstore-api-qr-2/src/routes/auth.js failFrontend).
+  const error = new URLSearchParams(window.location.search).get("error");
 
   return (
     <div className="login-screen">
@@ -20,7 +17,7 @@ export default function LoginPage() {
           test Authenticator SPI — dùng app di động đã đăng nhập sẵn để quét mã.
         </p>
         {error && <div className="alert">{error}</div>}
-        <button className="btn btn-blue" onClick={onClick}>
+        <button className="btn btn-blue" onClick={login}>
           Đăng nhập qua Keycloak
         </button>
       </div>

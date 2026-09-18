@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
 import { Book, getBooks } from "../services/bookService";
-import { logout, TokenResponse } from "../services/authService";
+import { useAuth } from "../context/AuthContext";
 
-interface Props {
-  token: TokenResponse;
-  username?: string;
-}
-
-export default function BooksPage({ token, username }: Props) {
+export default function BooksPage() {
+  const { user, logout } = useAuth();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -16,7 +12,7 @@ export default function BooksPage({ token, username }: Props) {
     let cancelled = false;
     setLoading(true);
     setError("");
-    getBooks(token.access_token)
+    getBooks()
       .then((data) => {
         if (cancelled) return;
         setBooks(data.books);
@@ -31,15 +27,15 @@ export default function BooksPage({ token, username }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, []);
 
   return (
     <>
       <div className="navbar">
         <div className="brand">📚 Bookstore</div>
         <div>
-          <span className="who">Xin chào, {username ?? "..."}</span>
-          <button className="btn" onClick={() => logout(token.id_token)}>
+          <span className="who">Xin chào, {user?.preferred_username ?? "..."}</span>
+          <button className="btn" onClick={() => logout()}>
             Đăng xuất
           </button>
         </div>
@@ -50,7 +46,7 @@ export default function BooksPage({ token, username }: Props) {
             <h2>Danh sách sách</h2>
             <p className="hint">
               Đã đăng nhập qua Keycloak (SPI QR / hoặc username-password) — dữ liệu từ
-              bookstore-api-mobile.
+              bookstore-api-mobile (qua proxy bookstore-api-qr-2).
             </p>
           </div>
         </div>

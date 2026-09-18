@@ -1,28 +1,27 @@
-import { useState } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "./App.css";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
-import CallbackPage from "./pages/CallbackPage";
 import BooksPage from "./pages/BooksPage";
-import { TokenResponse } from "./services/authService";
 
 export default function App() {
-  const [token, setToken] = useState<TokenResponse | null>(null);
-  const [username, setUsername] = useState<string | undefined>();
-
-  if (window.location.pathname === "/callback" && !token) {
-    return (
-      <CallbackPage
-        onLoggedIn={(t, u) => {
-          setToken(t);
-          setUsername(u);
-        }}
-      />
-    );
-  }
-
-  if (token) {
-    return <BooksPage token={token} username={username} />;
-  }
-
-  return <LoginPage />;
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <BooksPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
 }

@@ -1,0 +1,33 @@
+{
+  "name": "bookstore-expo-biometric",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "expo": "~57.0.23",
+    "expo-auth-session": "~57.0.12",
+    "expo-build-properties": "~57.0.20",
+    "expo-camera": "~57.0.5",
+    "expo-constants": "~57.0.18",
+    "expo-crypto": "~57.0.3",
+    "expo-dev-client": "~57.0.19",
+    "expo-local-authentication": "~57.0.3",
+    "expo-status-bar": "~57.0.1",
+    "expo-web-browser": "~57.0.3",
+    "jwt-decode": "^4.0.0",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-keychain": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web"
+  },
+  "private": true
+}

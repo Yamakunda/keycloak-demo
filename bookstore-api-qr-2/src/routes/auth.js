@@ -1,0 +1,185 @@
+const crypto = require("crypto");
+const express = require("express");
+const config = require("../config");
+
+const router = express.Router();
+
+const ACCESS_COOKIE = "access_token";
+const REFRESH_COOKIE = "refresh_token";
+const ID_COOKIE = "id_token";
+const STATE_COOKIE = "oauth_state";
+const VERIFIER_COOKIE = "oauth_code_verifier";
+
+// PKCE (RFC 7636) — client test-qr-web-2 bắt buộc pkce.code.challenge.method=S256, dù giờ
+// là confidential client (backend giữ client_secret). Giữ PKCE thay vì tắt yêu cầu ở
+// Keycloak: không có lý do để bỏ một lớp phòng thủ có sẵn.
+function base64UrlEncode(buffer) {
+  return buffer.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function generateCodeVerifier() {
+  return base64UrlEncode(crypto.randomBytes(32));
+}
+
+function deriveCodeChallenge(verifier) {
+  return base64UrlEncode(crypto.createHash("sha256").update(verifier).digest());
+}
+
+const sessionCookieOpts = (maxAgeSec) => ({
+  httpOnly: true,
+  sameSite: "lax",
+  secure: false, // demo chạy http://192.168.0.233 — bật true khi deploy https
+  path: "/",
+  maxAge: maxAgeSec * 1000,
+});
+
+function setSessionCookies(res, tokens) {
+  res.cookie(ACCESS_COOKIE, tokens.access_token, sessionCookieOpts(tokens.expires_in));
+  if (tokens.refresh_token) {
+    res.cookie(REFRESH_COOKIE, tokens.refresh_token, sessionCookieOpts(tokens.refresh_expires_in || 30 * 24 * 3600));
+  }
+  // Giữ id_token theo vòng đời refresh (không phải access) — logout cần nó làm
+  // id_token_hint kể cả khi access_token đã hết hạn; Keycloak chấp nhận hint hết hạn.
+  if (tokens.id_token) {
+    res.cookie(ID_COOKIE, tokens.id_token, sessionCookieOpts(tokens.refresh_expires_in || 30 * 24 * 3600));
+  }
+}
+
+// GET /api/auth/login — FE chỉ cần window.location.href = "{API_URL}/api/auth/login".
+// Backend sinh state (chống CSRF, lưu cookie httpOnly ngắn hạn) rồi redirect thẳng sang
+// TRANG LOGIN MẶC ĐỊNH của Keycloak (client test-qr-web-2 dùng flow "Browser with QR") —
+// đây là nơi nút "Try another way" → "Đăng nhập bằng QR" xuất hiện.
+router.get("/login", (req, res) => {
+  const state = crypto.randomBytes(24).toString("base64url");
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = deriveCodeChallenge(codeVerifier);
+  res.cookie(STATE_COOKIE, state, sessionCookieOpts(300));
+  res.cookie(VERIFIER_COOKIE, codeVerifier, sessionCookieOpts(300));
+
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: config.CLIENT_ID,
+    redirect_uri: config.REDIRECT_URI,
+    scope: "openid profile email",
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: "S256",
+  });
+
+  res.redirect(`${config.KC_BASE}/auth?${params}`);
+});
+
+// GET /api/auth/callback — Keycloak redirect thẳng vào đây (redirect_uri = backend, không
+// phải FE). Backend đổi code lấy token (client_secret không rời server), set cookie
+// httpOnly, rồi redirect browser về trang chủ SPA — FE không bao giờ thấy code/token thô.
+router.get("/callback", async (req, res) => {
+  const { code, state, error, error_description: errorDescription } = req.query;
+  const expectedState = req.cookies?.[STATE_COOKIE];
+  const codeVerifier = req.cookies?.[VERIFIER_COOKIE];
+  res.clearCookie(STATE_COOKIE, { path: "/" });
+  res.clearCookie(VERIFIER_COOKIE, { path: "/" });
+
+  const failFrontend = (message) =>
+    res.redirect(`${config.FRONTEND_ORIGIN}/login?error=${encodeURIComponent(message)}`);
+
+  if (error) return failFrontend(errorDescription || error);
+  if (!code) return failFrontend("Thiếu authorization code");
+  if (!state || state !== expectedState) return failFrontend("state không khớp — có thể là CSRF, hủy đăng nhập");
+  if (!codeVerifier) return failFrontend("Thiếu code_verifier — cookie đã hết hạn, thử đăng nhập lại");
+
+  try {
+    const tokenRes = await fetch(`${config.KC_BASE}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: config.CLIENT_ID,
+        client_secret: config.CLIENT_SECRET,
+        redirect_uri: config.REDIRECT_URI,
+        code,
+        code_verifier: codeVerifier,
+      }),
+    });
+
+    const tokens = await tokenRes.json();
+    if (!tokenRes.ok) return failFrontend(tokens.error_description || tokens.error || "Token exchange failed");
+
+    setSessionCookies(res, tokens);
+    res.redirect(config.FRONTEND_ORIGIN);
+  } catch (err) {
+    failFrontend(err.message);
+  }
+});
+
+// POST /api/auth/refresh — dùng refresh_token trong cookie httpOnly để lấy access_token mới
+router.post("/refresh", async (req, res) => {
+  const refreshToken = req.cookies?.[REFRESH_COOKIE];
+  if (!refreshToken) return res.status(401).json({ error: "unauthorized", message: "Không có refresh token" });
+
+  try {
+    const tokenRes = await fetch(`${config.KC_BASE}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        client_id: config.CLIENT_ID,
+        client_secret: config.CLIENT_SECRET,
+        refresh_token: refreshToken,
+      }),
+    });
+
+    const tokens = await tokenRes.json();
+    if (!tokenRes.ok) {
+      res.clearCookie(ACCESS_COOKIE, { path: "/" });
+      res.clearCookie(REFRESH_COOKIE, { path: "/" });
+      return res.status(401).json({ error: tokens.error, message: tokens.error_description || "Refresh failed" });
+    }
+
+    setSessionCookies(res, tokens);
+    res.json({ authenticated: true });
+  } catch (err) {
+    res.status(502).json({ error: "keycloak_unreachable", message: err.message });
+  }
+});
+
+// GET /api/auth/me — FE gọi để biết đã đăng nhập chưa + lấy thông tin user (không lộ token)
+router.get("/me", async (req, res) => {
+  const token = req.cookies?.[ACCESS_COOKIE];
+  if (!token) return res.status(401).json({ error: "unauthorized" });
+
+  try {
+    const userRes = await fetch(`${config.KC_BASE}/userinfo`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!userRes.ok) return res.status(401).json({ error: "unauthorized" });
+
+    const userinfo = await userRes.json();
+    res.json({ authenticated: true, userinfo });
+  } catch (err) {
+    res.status(502).json({ error: "keycloak_unreachable", message: err.message });
+  }
+});
+
+// POST /api/auth/logout — xóa cookie rồi trả về URL RP-Initiated Logout để FE redirect.
+// Kèm id_token_hint nên Keycloak kết thúc SSO session ngay, không hiện màn hình xác nhận.
+// Dùng POST (không phải GET redirect) để trang ngoài không thể logout hộ user qua một cái link.
+router.post("/logout", (req, res) => {
+  const idToken = req.cookies?.[ID_COOKIE];
+  res.clearCookie(ACCESS_COOKIE, { path: "/" });
+  res.clearCookie(REFRESH_COOKIE, { path: "/" });
+  res.clearCookie(ID_COOKIE, { path: "/" });
+
+  const params = new URLSearchParams({
+    post_logout_redirect_uri: `${config.FRONTEND_ORIGIN}/login`,
+  });
+  if (idToken) {
+    params.set("id_token_hint", idToken);
+  } else {
+    // Không còn id_token (cookie hết hạn/bị xóa) — Keycloak sẽ hiện màn hình xác nhận
+    params.set("client_id", config.CLIENT_ID);
+  }
+
+  res.json({ ok: true, logoutUrl: `${config.KC_BASE}/logout?${params}` });
+});
+
+module.exports = router;

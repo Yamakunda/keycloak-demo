@@ -1,0 +1,15 @@
+{
+  "name": "bookstore-api-qr-2",
+  "version": "1.0.0",
+  "description": "BFF cho bookstore-fe-qr-2 — đổi code lấy token bằng client_secret, set cookie httpOnly, proxy /api/books sang bookstore-api-mobile bằng Bearer header phía server.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.21.0"
+  }
+}

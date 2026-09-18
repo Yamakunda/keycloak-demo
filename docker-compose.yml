@@ -196,14 +196,33 @@ services:
     networks:
       - keycloak-net
 
+  bookstore-api-qr-2:
+    build: ./bookstore-api-qr-2
+    container_name: bookstore-api-qr-2
+    ports:
+      - "3061:3061"
+    # BFF cho bookstore-fe-qr-2: đổi code lấy token bằng client_secret của client
+    # confidential test-qr-web-2, set cookie httpOnly (FE không bao giờ thấy token thô),
+    # và proxy /api/books sang bookstore-api-mobile bằng Bearer header phía server.
+    env_file:
+      - ./bookstore-api-qr-2/.env
+    extra_hosts:
+      - "localhost:host-gateway"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - keycloak-net
+
   bookstore-fe-qr-2:
     build: ./bookstore-fe-qr-2
     container_name: bookstore-fe-qr-2
-    # SPA static: OAuth client public thật (Authorization Code + PKCE, client
-    # test-qr-web-2), redirect thẳng vào trang login mặc định của Keycloak để test
+    # SPA static: redirect thẳng vào trang login mặc định của Keycloak để test
     # Authenticator SPI "Đăng nhập bằng QR" qua cơ chế "Try another way" —
-    # xem ../keycloak-spi-qr-login. Khác bookstore-fe-qr (tự vẽ QR bằng JS, không đụng
-    # trang login Keycloak).
+    # xem ../keycloak-spi-qr-login. Toàn bộ Authorization Code flow (đổi code lấy token,
+    # giữ session) nằm ở bookstore-api-qr-2 (BFF, cookie httpOnly) — FE không tự đổi
+    # code/giữ token nữa (khác bản đầu dùng PKCE thẳng trong JS). Khác bookstore-fe-qr
+    # (tự vẽ QR bằng JS, không đụng trang login Keycloak).
     ports:
       - "3060:3060"
     depends_on:
